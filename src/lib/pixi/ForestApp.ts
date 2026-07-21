@@ -2,7 +2,7 @@ import { Application, Container, Graphics } from "pixi.js";
 import type { TreeTraits, WorldConfig } from "@/lib/github/types";
 import { SEASON_PALETTE } from "@/lib/world/seasons";
 import { createRng } from "@/lib/world/rng";
-import { loadForestSprites, scatterForestProps } from "./decorSprites";
+import { loadForestSprites, scatterForestProps, type ForestLamp } from "./decorSprites";
 import { WORLD_SKY_RATIO, buildForestFloor } from "./mapDecor";
 import { drawFireflies, drawTree } from "./trees";
 
@@ -16,6 +16,7 @@ export class ForestApp {
   private fxLayer: Container;
   private weatherLayer: Container;
   private overlayLayer: Container;
+  private lightLayer: Container;
   private config: WorldConfig;
   private onSelect: TreeSelectHandler;
   private keys = new Set<string>();
@@ -29,6 +30,7 @@ export class ForestApp {
   private initPromise: Promise<void> | null = null;
   private particles: { x: number; y: number; vx: number; vy: number; life: number }[] = [];
   private wildlife: { x: number; y: number; vx: number; type: "bird" | "bunny" }[] = [];
+  private lamps: ForestLamp[] = [];
   private cleanupInput: (() => void) | null = null;
 
   constructor(config: WorldConfig, onSelect: TreeSelectHandler) {
@@ -39,6 +41,7 @@ export class ForestApp {
     this.fxLayer = new Container();
     this.weatherLayer = new Container();
     this.overlayLayer = new Container();
+    this.lightLayer = new Container();
     this.config = config;
     this.onSelect = onSelect;
   }
@@ -77,6 +80,8 @@ export class ForestApp {
     this.world.addChild(this.weatherLayer);
     this.app.stage.addChild(this.world);
     this.app.stage.addChild(this.overlayLayer);
+    // Lamp blooms draw above the night veil so lights actually cut through darkness
+    this.app.stage.addChild(this.lightLayer);
 
     this.buildGround();
     this.buildTrees();
@@ -87,7 +92,7 @@ export class ForestApp {
         const horizon = this.config.worldHeight * WORLD_SKY_RATIO;
         const rng = createRng(this.config.seed ^ 0xdec0);
         const points = this.config.trees.map((t) => ({ x: t.x, y: t.y }));
-        scatterForestProps(
+        const { lamps } = scatterForestProps(
           this.treeLayer,
           this.config.worldWidth,
           this.config.worldHeight,
@@ -95,6 +100,7 @@ export class ForestApp {
           rng,
           points
         );
+        this.lamps = lamps;
       }
     } catch (err) {
       console.warn("Forest decor sprites failed to load", err);
@@ -372,12 +378,39 @@ export class ForestApp {
 
   private updateDayNight(): void {
     this.clearLayer(this.overlayLayer);
+    this.clearLayer(this.lightLayer);
+
     const night = dayNightFactor(this.dayPhase);
-    if (night <= 0.02) return;
-    const g = new Graphics();
-    g.rect(0, 0, this.app.screen.width, this.app.screen.height);
-    g.fill({ color: 0x0a1628, alpha: night * 0.45 });
-    this.overlayLayer.addChild(g);
+
+    for (const lamp of this.lamps) {
+      lamp.setNightFactor(night);
+    }
+
+    if (night > 0.02) {
+      const g = new Graphics();
+      g.rect(0, 0, this.app.screen.width, this.app.screen.height);
+      g.fill({ color: 0x0a1628, alpha: night * 0.5 });
+      this.overlayLayer.addChild(g);
+    }
+
+    // Screen-space blooms so lit lamps punch through the night overlay
+    const bloom = new Graphics();
+    let anyLit = false;
+    for (const lamp of this.lamps) {
+      if (!lamp.lit) continue;
+      anyLit = true;
+      const sx = (lamp.bulbX - this.camera.x) * this.camera.zoom;
+      const sy = (lamp.bulbY - this.camera.y) * this.camera.zoom;
+      const strength = 0.35 + night * 0.65;
+      const r = (36 + night * 40) * this.camera.zoom;
+      bloom.circle(sx, sy, r * 1.6);
+      bloom.fill({ color: 0xffb84a, alpha: 0.1 * strength });
+      bloom.circle(sx, sy, r);
+      bloom.fill({ color: 0xffd56a, alpha: 0.18 * strength });
+      bloom.circle(sx, sy, r * 0.45);
+      bloom.fill({ color: 0xfff1b0, alpha: 0.32 * strength });
+    }
+    if (anyLit) this.lightLayer.addChild(bloom);
   }
 
   private updateWildlife(deltaMS: number): void {

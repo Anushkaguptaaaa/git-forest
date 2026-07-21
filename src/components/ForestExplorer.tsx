@@ -66,7 +66,7 @@ export function ForestExplorer({ data }: ForestExplorerProps) {
       </header>
 
       <div className="explorer-hint font-pixel">
-        WASD / arrows · drag · scroll zoom · click a tree
+        WASD / arrows · drag · scroll zoom · click trees · click lamps for light
       </div>
 
       <RepoPopup />

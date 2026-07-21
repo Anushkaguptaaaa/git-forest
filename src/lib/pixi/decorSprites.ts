@@ -1,4 +1,4 @@
-import { Assets, Container, Sprite, Texture } from "pixi.js";
+import { Assets, Container, Graphics, Sprite, Texture } from "pixi.js";
 import type { Rng } from "@/lib/world/rng";
 import lampUrl from "@/assets/lamp.png";
 import mushUrl from "@/assets/mush.png";
@@ -22,6 +22,107 @@ function tex(url: string): Texture {
   return Assets.get(url) as Texture;
 }
 
+/** Clickable lamp post — toggle light; glow is brightest at night. */
+export class ForestLamp {
+  readonly root: Container;
+  lit = false;
+  /** World position of the lantern bulb (for screen-space bloom). */
+  readonly bulbOffsetY: number;
+  private readonly sprite: Sprite;
+  private readonly localGlow: Graphics;
+  private night = 0;
+
+  constructor(texture: Texture, x: number, y: number, targetH: number) {
+    this.root = new Container();
+    this.root.x = x;
+    this.root.y = y;
+    this.root.zIndex = y;
+    this.root.eventMode = "static";
+    this.root.cursor = "pointer";
+
+    this.sprite = new Sprite(texture);
+    this.sprite.anchor.set(0.5, 1);
+    const scale = targetH / texture.height;
+    this.sprite.scale.set(scale);
+
+    // Lantern sits near the top of the art
+    this.bulbOffsetY = -targetH * 0.78;
+
+    this.localGlow = new Graphics();
+    this.localGlow.eventMode = "none";
+    // Behind the post so the fixture stays crisp
+    this.root.addChild(this.localGlow);
+    this.root.addChild(this.sprite);
+
+    // Generous hit area around the post
+    this.root.hitArea = {
+      contains: (lx: number, ly: number) => {
+        const w = Math.abs(this.sprite.width) * 0.55;
+        return lx > -w && lx < w && ly > -targetH && ly < 8;
+      },
+    };
+
+    this.root.on("pointertap", (e) => {
+      e.stopPropagation();
+      this.toggle();
+    });
+
+    this.redraw();
+  }
+
+  get x(): number {
+    return this.root.x;
+  }
+
+  get y(): number {
+    return this.root.y;
+  }
+
+  get bulbX(): number {
+    return this.root.x;
+  }
+
+  get bulbY(): number {
+    return this.root.y + this.bulbOffsetY;
+  }
+
+  toggle(): void {
+    this.lit = !this.lit;
+    this.redraw();
+  }
+
+  /** 0 = day, 1 = night — scales how strong the glow feels */
+  setNightFactor(night: number): void {
+    this.night = night;
+    this.redraw();
+  }
+
+  private redraw(): void {
+    this.localGlow.clear();
+    if (!this.lit) {
+      this.sprite.tint = 0xffffff;
+      return;
+    }
+
+    // Warm tint on the fixture when on
+    this.sprite.tint = 0xfff2d0;
+
+    // Soft local glow (world-space), stronger as night deepens
+    const strength = 0.2 + this.night * 0.75;
+    const r = 28 + this.night * 22;
+    this.localGlow.circle(0, this.bulbOffsetY, r * 1.35);
+    this.localGlow.fill({ color: 0xffc14a, alpha: 0.12 * strength });
+    this.localGlow.circle(0, this.bulbOffsetY, r * 0.85);
+    this.localGlow.fill({ color: 0xffd978, alpha: 0.2 * strength });
+    this.localGlow.circle(0, this.bulbOffsetY, r * 0.4);
+    this.localGlow.fill({ color: 0xfff3c0, alpha: 0.35 * strength });
+  }
+}
+
+export interface ScatterResult {
+  lamps: ForestLamp[];
+}
+
 /**
  * Scatter lamp posts & mushroom clusters into `layer`.
  * Sprites are anchored at the feet (bottom-center) for y-sorting with trees.
@@ -33,9 +134,10 @@ export function scatterForestProps(
   horizon: number,
   rng: Rng,
   treePoints: { x: number; y: number }[]
-): void {
+): ScatterResult {
   const lampTex = tex(LAMP_URL);
   const mushTex = tex(MUSH_URL);
+  const lamps: ForestLamp[] = [];
 
   const tooClose = (x: number, y: number, minDist: number) =>
     treePoints.some((t) => {
@@ -53,15 +155,10 @@ export function scatterForestProps(
     const y = rng.float(horizon + 80, worldHeight - 40);
     if (tooClose(x, y, 70)) continue;
 
-    const s = new Sprite(lampTex);
-    s.anchor.set(0.5, 1);
-    const targetH = rng.float(56, 78);
-    s.scale.set(targetH / lampTex.height);
-    s.x = x;
-    s.y = y;
-    s.zIndex = y;
-    layer.addChild(s);
+    const lamp = new ForestLamp(lampTex, x, y, rng.float(56, 78));
+    layer.addChild(lamp.root);
     treePoints.push({ x, y });
+    lamps.push(lamp);
     placedLamps++;
   }
 
@@ -82,6 +179,7 @@ export function scatterForestProps(
     s.x = x;
     s.y = y;
     s.zIndex = y;
+    s.eventMode = "none";
     layer.addChild(s);
     treePoints.push({ x, y });
     placedMush++;
@@ -89,4 +187,5 @@ export function scatterForestProps(
 
   layer.sortableChildren = true;
   layer.sortChildren();
+  return { lamps };
 }
