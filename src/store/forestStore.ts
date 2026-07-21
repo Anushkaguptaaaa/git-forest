@@ -1,6 +1,8 @@
 import { create } from "zustand";
-import type { ForestData, TreeTraits, WorldConfig } from "@/lib/github/types";
+import type { ForestData, Season, TreeTraits, WorldConfig } from "@/lib/github/types";
 import type { DecorKind } from "@/lib/pixi/customDecor";
+import { createRng } from "@/lib/world/rng";
+import { saveSeasonOverride, weatherFromSeed } from "@/lib/world/seasons";
 
 interface ForestState {
   data: ForestData | null;
@@ -18,6 +20,7 @@ interface ForestState {
   setForest: (data: ForestData, world: WorldConfig) => void;
   selectTree: (tree: TreeTraits | null) => void;
   setTreeCommits: (treeId: number, commits: number) => void;
+  setSeason: (season: Season) => void;
   setCustomizeOpen: (open: boolean) => void;
   setDecorBrush: (brush: DecorKind | null) => void;
   setSelectedDecor: (
@@ -76,6 +79,18 @@ export const useForestStore = create<ForestState>((set) => ({
           }
         : null,
     })),
+  setSeason: (season) =>
+    set((s) => {
+      if (!s.world || s.world.season === season) return s;
+      saveSeasonOverride(s.world.username, season);
+      const weather = weatherFromSeed(
+        createRng((s.world.seed ^ 0x5ea50) + season.length * 0x9e37),
+        season
+      );
+      return {
+        world: { ...s.world, season, weather },
+      };
+    }),
   setCustomizeOpen: (open) =>
     set(
       open

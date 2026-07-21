@@ -1,5 +1,5 @@
 import { Application, Container, Graphics } from "pixi.js";
-import type { TreeTraits, WorldConfig } from "@/lib/github/types";
+import type { Season, TreeTraits, Weather, WorldConfig } from "@/lib/github/types";
 import { SEASON_PALETTE } from "@/lib/world/seasons";
 import { createRng } from "@/lib/world/rng";
 import {
@@ -121,6 +121,32 @@ export class ForestApp {
     }
   }
 
+  /** Rebuild seasonal visuals in place (keeps camera + custom decor). */
+  setSeason(season: Season, weather: Weather): void {
+    if (!this.ready || this.destroyed) return;
+    if (this.config.season === season && this.config.weather === weather) return;
+
+    this.config = { ...this.config, season, weather };
+    this.app.renderer.background.color = SEASON_PALETTE[season].grass;
+
+    this.persistPlacements();
+    this.selectDecor(null);
+    this.selectTreeNode(null);
+
+    this.clearLayer(this.groundLayer);
+    this.destroyLayerChildren(this.treeLayer);
+    this.destroyLayerChildren(this.signLayer);
+    this.clearLayer(this.fxLayer);
+    this.placements.clear();
+    this.lamps = [];
+    this.particles = [];
+
+    this.buildGround();
+    this.buildTrees();
+    this.scatterMapProps();
+    this.restoreCustomDecor();
+  }
+
   setSelectedDecorScale(scale: number): void {
     if (!this.selectedDecor) return;
     this.selectedDecor.setHeight(scale);
@@ -209,22 +235,7 @@ export class ForestApp {
     this.restoreCustomDecor();
 
     if (!this.destroyed) {
-      try {
-        const horizon = this.config.worldHeight * WORLD_SKY_RATIO;
-        const rng = createRng(this.config.seed ^ 0xdec0);
-        const points = this.config.trees.map((t) => ({ x: t.x, y: t.y }));
-        const { lamps } = scatterForestProps(
-          this.treeLayer,
-          this.config.worldWidth,
-          this.config.worldHeight,
-          horizon,
-          rng,
-          points
-        );
-        this.lamps = lamps;
-      } catch (err) {
-        console.warn("Forest decor scatter failed", err);
-      }
+      this.scatterMapProps();
     }
 
     if (this.destroyed) {
@@ -236,9 +247,41 @@ export class ForestApp {
     this.camera.zoom = this.fitZoom();
     this.centerCamera();
     this.bindInput();
+    this.bindStageSelection();
 
     this.app.ticker.add((ticker) => this.update(ticker.deltaMS));
     this.ready = true;
+  }
+
+  private scatterMapProps(): void {
+    try {
+      const horizon = this.config.worldHeight * WORLD_SKY_RATIO;
+      const rng = createRng(this.config.seed ^ 0xdec0);
+      const points = this.config.trees.map((t) => ({ x: t.x, y: t.y }));
+      const { lamps } = scatterForestProps(
+        this.treeLayer,
+        this.config.worldWidth,
+        this.config.worldHeight,
+        horizon,
+        rng,
+        points
+      );
+      this.lamps = lamps;
+    } catch (err) {
+      console.warn("Forest decor scatter failed", err);
+    }
+  }
+
+  private bindStageSelection(): void {
+    this.app.stage.eventMode = "static";
+    this.app.stage.hitArea = this.app.screen;
+    this.app.stage.on("pointertap", () => {
+      if (this.customizeMode) return;
+      this.selectTreeNode(null);
+    });
+    this.app.renderer.on("resize", () => {
+      this.app.stage.hitArea = this.app.screen;
+    });
   }
 
   private restoreCustomDecor(): void {
@@ -419,16 +462,6 @@ export class ForestApp {
       this.treeLayer.addChild(sprite);
     }
     this.treeLayer.sortChildren();
-
-    this.app.stage.eventMode = "static";
-    this.app.stage.hitArea = this.app.screen;
-    this.app.stage.on("pointertap", () => {
-      if (this.customizeMode) return;
-      this.selectTreeNode(null);
-    });
-    this.app.renderer.on("resize", () => {
-      this.app.stage.hitArea = this.app.screen;
-    });
   }
 
   private selectTreeNode(tree: TreeTraits | null): void {
@@ -798,6 +831,12 @@ export class ForestApp {
   private clearLayer(layer: Container): void {
     for (const child of layer.removeChildren()) {
       child.destroy();
+    }
+  }
+
+  private destroyLayerChildren(layer: Container): void {
+    for (const child of layer.removeChildren()) {
+      child.destroy({ children: true });
     }
   }
 

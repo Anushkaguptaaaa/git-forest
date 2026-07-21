@@ -74,7 +74,7 @@ export interface TreeTraits {
   y: number;
 }
 
-export type Season = "spring" | "summer" | "autumn" | "winter";
+export type Season = "monsoon" | "summer" | "autumn" | "winter";
 export type Weather = "clear" | "cloudy" | "rain" | "snow" | "fog";
 
 export interface WorldConfig {

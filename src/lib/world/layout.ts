@@ -2,7 +2,7 @@ import { mapRepoToTraits } from "@/lib/github/mapRepos";
 import type { ForestData, TreeForm, TreeTraits, WorldConfig } from "@/lib/github/types";
 import { createRng } from "./rng";
 import { hashUsername } from "./seed";
-import { seasonFromSeed, weatherFromSeed } from "./seasons";
+import { seasonFromSeed, weatherFromSeed, loadSeasonOverride } from "./seasons";
 
 const TILE = 48;
 const MIN_DIST = 64;
@@ -85,7 +85,9 @@ function placeTrees(
 export function buildWorld(data: ForestData): WorldConfig {
   const seed = hashUsername(data.profile.login);
   const rng = createRng(seed);
-  const season = seasonFromSeed(rng);
+  // Always advance RNG the same way so layout stays stable when season is overridden
+  const seededSeason = seasonFromSeed(rng);
+  const season = loadSeasonOverride(data.profile.login) ?? seededSeason;
   const weather = weatherFromSeed(rng, season);
 
   const baseTraits = assignForms(

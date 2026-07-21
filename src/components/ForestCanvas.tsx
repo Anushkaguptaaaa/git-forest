@@ -26,6 +26,9 @@ function waitForHostSize(el: HTMLElement): Promise<void> {
 export function ForestCanvas({ world }: ForestCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<ForestApp | null>(null);
+  const worldRef = useRef(world);
+  worldRef.current = world;
+
   const selectTree = useForestStore((s) => s.selectTree);
   const selectRef = useRef(selectTree);
   selectRef.current = selectTree;
@@ -38,13 +41,14 @@ export function ForestCanvas({ world }: ForestCanvasProps) {
 
   const mountIdRef = useRef(0);
 
+  // Remount only when the forest identity changes — not on season toggles
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
     const mountId = ++mountIdRef.current;
     let cancelled = false;
-    const app = new ForestApp(world, (tree) => selectRef.current(tree));
+    const app = new ForestApp(worldRef.current, (tree) => selectRef.current(tree));
     app.setDecorSelectHandler((info) => {
       setSelectedDecor(info);
       if (info) setSelectedDecorScale(info.scale);
@@ -56,6 +60,9 @@ export function ForestCanvas({ world }: ForestCanvasProps) {
         await waitForHostSize(host);
         if (cancelled || mountIdRef.current !== mountId) return;
         await app.init(host);
+        if (cancelled || mountIdRef.current !== mountId) return;
+        const { season, weather } = worldRef.current;
+        app.setSeason(season, weather);
       } catch (err) {
         if (!cancelled && mountIdRef.current === mountId) {
           console.error("Forest init failed", err);
@@ -68,7 +75,11 @@ export function ForestCanvas({ world }: ForestCanvasProps) {
       if (appRef.current === app) appRef.current = null;
       void app.destroy();
     };
-  }, [world, setSelectedDecor, setSelectedDecorScale]);
+  }, [world.username, world.seed, setSelectedDecor, setSelectedDecorScale]);
+
+  useEffect(() => {
+    appRef.current?.setSeason(world.season, world.weather);
+  }, [world.season, world.weather]);
 
   useEffect(() => {
     appRef.current?.setCustomizeMode(customizeOpen);

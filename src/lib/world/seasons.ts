@@ -1,8 +1,35 @@
 import type { Season, Weather } from "@/lib/github/types";
 import type { Rng } from "./rng";
 
+export const SEASONS = ["monsoon", "summer", "autumn", "winter"] as const;
+
+const SEASON_STORAGE_PREFIX = "git-forest:season:";
+
 export function seasonFromSeed(rng: Rng): Season {
-  return rng.pick(["spring", "summer", "autumn", "winter"] as const);
+  return rng.pick(SEASONS);
+}
+
+export function isSeason(value: string): value is Season {
+  return (SEASONS as readonly string[]).includes(value);
+}
+
+export function loadSeasonOverride(username: string): Season | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(SEASON_STORAGE_PREFIX + username.toLowerCase());
+    if (raw === "spring") return "monsoon"; // migrated rename
+    return raw && isSeason(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveSeasonOverride(username: string, season: Season): void {
+  try {
+    localStorage.setItem(SEASON_STORAGE_PREFIX + username.toLowerCase(), season);
+  } catch {
+    /* ignore quota / private mode */
+  }
 }
 
 export function weatherFromSeed(rng: Rng, season: Season): Weather {
@@ -19,9 +46,9 @@ export function weatherFromSeed(rng: Rng, season: Season): Weather {
     if (roll < 0.7) return "cloudy";
     return "clear";
   }
-  if (season === "spring") {
-    if (roll < 0.3) return "rain";
-    if (roll < 0.5) return "cloudy";
+  if (season === "monsoon") {
+    if (roll < 0.55) return "rain";
+    if (roll < 0.75) return "cloudy";
     return "clear";
   }
   // summer
@@ -41,7 +68,7 @@ export const SEASON_PALETTE: Record<
     accent: number;
   }
 > = {
-  spring: {
+  monsoon: {
     grass: 0x5ec84a,
     grassDark: 0x3a9a32,
     grassLight: 0x8ae05a,

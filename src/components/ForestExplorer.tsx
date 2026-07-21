@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import type { ForestData } from "@/lib/github/types";
 import { buildWorld } from "@/lib/world/layout";
+import { SEASONS } from "@/lib/world/seasons";
 import { useForestStore } from "@/store/forestStore";
 import { RepoPopup } from "./RepoPopup";
 
@@ -20,6 +21,7 @@ interface ForestExplorerProps {
 export function ForestExplorer({ data }: ForestExplorerProps) {
   const world = useForestStore((s) => s.world);
   const setForest = useForestStore((s) => s.setForest);
+  const setSeason = useForestStore((s) => s.setSeason);
   const customizeOpen = useForestStore((s) => s.customizeOpen);
   const setCustomizeOpen = useForestStore((s) => s.setCustomizeOpen);
   const season = world?.season;
@@ -52,6 +54,25 @@ export function ForestExplorer({ data }: ForestExplorerProps) {
           >
             Customize
           </button>
+          <div
+            className="explorer-panel explorer-seasons"
+            role="group"
+            aria-label="Season"
+          >
+            {SEASONS.map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={`font-pixel explorer-season${
+                  season === s ? " is-active" : ""
+                }`}
+                aria-pressed={season === s}
+                onClick={() => setSeason(s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="explorer-panel explorer-profile">
