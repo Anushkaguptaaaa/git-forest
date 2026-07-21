@@ -9,52 +9,11 @@ const PATH = {
   dark: 0xa88448,
   edge: 0x6f8f3a,
 };
-
 const FENCE = { light: 0xb88850, mid: 0x7a4e28, dark: 0x3f2410 };
 const STONE = { mid: 0x8e8894 };
 
 function px(n: number): number {
   return Math.round(n);
-}
-
-export interface PathDef {
-  /** Polyline waypoints (world space) — sampled into one continuous ribbon */
-  points: { x: number; y: number }[];
-  halfW: number;
-}
-
-/** Shared path curves — used by dirt ribbons and fence props. */
-export function forestPathDefs(worldWidth: number, worldHeight: number): PathDef[] {
-  const w = worldWidth;
-  const h = worldHeight;
-  // Shared fork point so the spur joins the main trail cleanly
-  const fork = { x: w * 0.42, y: h * 0.52 };
-  return [
-    // One continuous main trail: left edge → right edge
-    {
-      halfW: 14,
-      points: [
-        { x: 0, y: h * 0.6 },
-        { x: w * 0.18, y: h * 0.46 },
-        { x: w * 0.3, y: h * 0.42 },
-        fork,
-        { x: w * 0.58, y: h * 0.64 },
-        { x: w * 0.78, y: h * 0.72 },
-        { x: w * 0.92, y: h * 0.56 },
-        { x: w, y: h * 0.5 },
-      ],
-    },
-    // Spur from the fork up to the top edge
-    {
-      halfW: 11,
-      points: [
-        fork,
-        { x: w * 0.5, y: h * 0.3 },
-        { x: w * 0.58, y: h * 0.12 },
-        { x: w * 0.62, y: 0 },
-      ],
-    },
-  ];
 }
 
 /**
@@ -72,7 +31,7 @@ export function buildForestFloor(
   const horizon = 0;
 
   root.addChild(drawSkyAndGrass(worldWidth, worldHeight, horizon, palette, rng));
-  root.addChild(drawPaths(worldWidth, worldHeight, rng));
+  root.addChild(drawHorizontalTrail(worldWidth, worldHeight, rng));
   root.addChild(drawProps(worldWidth, worldHeight, horizon, season, rng));
 
   return root;
@@ -124,35 +83,70 @@ function drawSkyAndGrass(
   return g;
 }
 
-function drawPaths(worldWidth: number, worldHeight: number, rng: Rng): Graphics {
+/** Single left→right trail only (no spur / fork). */
+function drawHorizontalTrail(worldWidth: number, worldHeight: number, rng: Rng): Graphics {
   const g = new Graphics();
-  for (const path of forestPathDefs(worldWidth, worldHeight)) {
-    drawDirtRibbon(g, path, rng);
+  const y = worldHeight * 0.58;
+  // Gentle horizontal S — stays roughly mid-height edge to edge
+  const points = [
+    { x: 0, y: y + 8 },
+    { x: worldWidth * 0.22, y: y - 18 },
+    { x: worldWidth * 0.45, y: y + 10 },
+    { x: worldWidth * 0.7, y: y - 8 },
+    { x: worldWidth, y: y + 4 },
+  ];
+
+  const center = samplePolyline(points, 14);
+  if (center.length < 2) return g;
+
+  const halfW = 14;
+  const strokePath = (width: number, color: number) => {
+    g.moveTo(px(center[0]!.x), px(center[0]!.y));
+    for (let i = 1; i < center.length; i++) {
+      g.lineTo(px(center[i]!.x), px(center[i]!.y));
+    }
+    g.stroke({ width, color, join: "round", cap: "round" });
+  };
+
+  strokePath(halfW * 2 + 5, PATH.edge);
+  strokePath(halfW * 2, PATH.mid);
+  strokePath(Math.max(4, halfW * 0.65), PATH.light);
+
+  for (let i = 2; i < center.length - 2; i++) {
+    if (!rng.chance(0.4)) continue;
+    const p = center[i]!;
+    const a = center[i - 1]!;
+    const b = center[i + 1]!;
+    let tx = b.x - a.x;
+    let ty = b.y - a.y;
+    const len = Math.hypot(tx, ty) || 1;
+    const nx = -ty / len;
+    const ny = tx / len;
+    const ox = rng.float(-halfW * 0.45, halfW * 0.45);
+    g.rect(px(p.x + nx * ox), px(p.y + ny * ox), rng.int(1, 2), rng.int(1, 2));
+    g.fill(rng.chance(0.5) ? PATH.dark : PATH.light);
   }
+
   return g;
 }
 
-/** Sample a smooth centerline through waypoints (gentle quadratic segments). */
-function samplePathCenterline(
+function samplePolyline(
   points: { x: number; y: number }[],
-  samplesPerSeg = 12
+  samplesPerSeg: number
 ): { x: number; y: number }[] {
   if (points.length < 2) return points.slice();
-
   const out: { x: number; y: number }[] = [];
   for (let seg = 0; seg < points.length - 1; seg++) {
     const a = points[seg]!;
     const b = points[seg + 1]!;
-    // Control point: midpoint nudged perpendicular for a soft curve
     const mx = (a.x + b.x) * 0.5;
     const my = (a.y + b.y) * 0.5;
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const len = Math.hypot(dx, dy) || 1;
-    const bulge = Math.min(28, len * 0.18) * (seg % 2 === 0 ? 1 : -1);
+    const bulge = Math.min(22, len * 0.14) * (seg % 2 === 0 ? 1 : -1);
     const cx = mx + (-dy / len) * bulge;
     const cy = my + (dx / len) * bulge;
-
     const last = seg === points.length - 2;
     const count = last ? samplesPerSeg : samplesPerSeg - 1;
     for (let i = 0; i <= count; i++) {
@@ -165,54 +159,6 @@ function samplePathCenterline(
     }
   }
   return out;
-}
-
-/** Point at normalized t along a path def (for fences / props). */
-export function pathPointAt(path: PathDef, t: number): { x: number; y: number } {
-  const pts = samplePathCenterline(path.points, 10);
-  if (pts.length === 0) return { x: 0, y: 0 };
-  const u = Math.max(0, Math.min(1, t)) * (pts.length - 1);
-  const i = Math.floor(u);
-  const f = u - i;
-  const a = pts[i]!;
-  const b = pts[Math.min(pts.length - 1, i + 1)]!;
-  return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
-}
-
-/**
- * Dirt trail via round strokes — no filled polygons (those self-intersect and
- * leave overlapping rectangular blobs on top of trees / each other).
- */
-function drawDirtRibbon(g: Graphics, path: PathDef, rng: Rng): void {
-  const center = samplePathCenterline(path.points, 16);
-  if (center.length < 2) return;
-
-  const strokePath = (width: number, color: number) => {
-    g.moveTo(px(center[0]!.x), px(center[0]!.y));
-    for (let i = 1; i < center.length; i++) {
-      g.lineTo(px(center[i]!.x), px(center[i]!.y));
-    }
-    g.stroke({ width, color, join: "round", cap: "round" });
-  };
-
-  strokePath(path.halfW * 2 + 5, PATH.edge);
-  strokePath(path.halfW * 2, PATH.mid);
-  strokePath(Math.max(4, path.halfW * 0.65), PATH.light);
-
-  for (let i = 2; i < center.length - 2; i++) {
-    if (!rng.chance(0.4)) continue;
-    const p = center[i]!;
-    const a = center[i - 1]!;
-    const b = center[i + 1]!;
-    let tx = b.x - a.x;
-    let ty = b.y - a.y;
-    const len = Math.hypot(tx, ty) || 1;
-    const nx = -ty / len;
-    const ny = tx / len;
-    const ox = rng.float(-path.halfW * 0.45, path.halfW * 0.45);
-    g.rect(px(p.x + nx * ox), px(p.y + ny * ox), rng.int(1, 2), rng.int(1, 2));
-    g.fill(rng.chance(0.5) ? PATH.dark : PATH.light);
-  }
 }
 
 function drawProps(
@@ -255,22 +201,6 @@ function drawProps(
       g.ellipse(px(x), px(y - 5), 6, 4);
       g.fill(0xd44040);
     }
-  }
-
-  // Fence posts along the main path
-  const main = forestPathDefs(worldWidth, worldHeight)[0]!;
-  for (let i = 0; i < 10; i++) {
-    const t = 0.12 + i * 0.08;
-    const p = pathPointAt(main, t);
-    const side = i % 2 === 0 ? -1 : 1;
-    const fx = p.x + side * 22;
-    const fy = p.y + side * 5;
-    g.rect(px(fx - 1), px(fy - 12), 3, 14);
-    g.fill(FENCE.mid);
-    g.rect(px(fx - 1), px(fy - 12), 1, 14);
-    g.fill(FENCE.light);
-    g.rect(px(fx - (side > 0 ? 6 : 0)), px(fy - 8), 6, 2);
-    g.fill(FENCE.dark);
   }
 
   // Signposts

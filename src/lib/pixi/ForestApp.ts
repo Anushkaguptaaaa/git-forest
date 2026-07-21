@@ -14,6 +14,7 @@ import {
   type PlacedDecorData,
 } from "./customDecor";
 import { loadForestSprites, scatterForestProps, type ForestLamp } from "./decorSprites";
+import { loadWoodPanel } from "./treeSign";
 import { WORLD_SKY_RATIO, buildForestFloor } from "./mapDecor";
 import { drawFireflies, drawTree } from "./trees";
 
@@ -27,6 +28,7 @@ export class ForestApp {
   private world: Container;
   private groundLayer: Container;
   private treeLayer: Container;
+  private signLayer: Container;
   private fxLayer: Container;
   private weatherLayer: Container;
   private overlayLayer: Container;
@@ -47,6 +49,12 @@ export class ForestApp {
   private wildlife: { x: number; y: number; vx: number; type: "bird" | "bunny" }[] = [];
   private lamps: ForestLamp[] = [];
   private cleanupInput: (() => void) | null = null;
+  private selectedTreeId: number | null = null;
+  private treeNodes = new Map<number, Container>();
+  private treeSigns = new Map<
+    number,
+    { sign: Container; ox: number; oy: number; treeX: number; treeY: number }
+  >();
 
   private customizeMode = false;
   private decorBrush: DecorKind | null = null;
@@ -62,10 +70,22 @@ export class ForestApp {
     this.world = new Container();
     this.groundLayer = new Container();
     this.treeLayer = new Container();
+    this.signLayer = new Container();
     this.fxLayer = new Container();
     this.weatherLayer = new Container();
     this.overlayLayer = new Container();
     this.lightLayer = new Container();
+    // FX / overlays must never steal clicks from trees & lamps
+    this.fxLayer.eventMode = "none";
+    this.weatherLayer.eventMode = "none";
+    this.overlayLayer.eventMode = "none";
+    this.lightLayer.eventMode = "none";
+    this.groundLayer.eventMode = "none";
+    this.fxLayer.interactiveChildren = false;
+    this.weatherLayer.interactiveChildren = false;
+    this.overlayLayer.interactiveChildren = false;
+    this.lightLayer.interactiveChildren = false;
+    this.groundLayer.interactiveChildren = false;
     this.config = config;
     this.onSelect = onSelect;
   }
@@ -81,11 +101,16 @@ export class ForestApp {
       this.selectDecor(null);
       if (this.ready) this.app.canvas.style.cursor = "default";
     } else {
-      this.onSelect(null);
+      this.selectTreeNode(null);
       if (this.ready) {
         this.app.canvas.style.cursor = this.decorBrush ? "crosshair" : "default";
       }
     }
+  }
+
+  /** Called when UI (repo popup) clears the selection. */
+  clearTreeSelection(): void {
+    this.selectTreeNode(null);
   }
 
   setDecorBrush(kind: DecorKind | null): void {
@@ -155,6 +180,11 @@ export class ForestApp {
 
     this.world.addChild(this.groundLayer);
     this.world.addChild(this.treeLayer);
+    // Signs sit above every tree so foliage never covers a hovered/selected plank
+    this.signLayer.sortableChildren = true;
+    this.signLayer.eventMode = "none";
+    this.signLayer.interactiveChildren = false;
+    this.world.addChild(this.signLayer);
     this.world.addChild(this.fxLayer);
     this.world.addChild(this.weatherLayer);
     this.app.stage.addChild(this.world);
@@ -164,6 +194,7 @@ export class ForestApp {
     try {
       await loadForestSprites();
       await loadCustomDecorSprites();
+      await loadWoodPanel();
     } catch (err) {
       console.warn("Forest decor sprites failed to load", err);
     }
@@ -341,13 +372,49 @@ export class ForestApp {
 
   private buildTrees(): void {
     this.treeLayer.sortableChildren = true;
+    this.treeNodes.clear();
+    this.treeSigns.clear();
+    this.signLayer.removeChildren();
+    this.selectedTreeId = null;
+
     for (const tree of this.config.trees) {
       const sprite = drawTree(tree, this.config.season);
       sprite.zIndex = tree.y;
+      this.treeNodes.set(tree.id, sprite);
+
+      const withSign = sprite as Container & { repoSign?: Container };
+      if (withSign.repoSign) {
+        const sign = withSign.repoSign;
+        const ox = sign.x;
+        const oy = sign.y;
+        // Reparent onto the dedicated sign layer (world-space coords)
+        this.signLayer.addChild(sign);
+        sign.x = tree.x + ox;
+        sign.y = tree.y + oy;
+        sign.zIndex = tree.y;
+        this.treeSigns.set(tree.id, {
+          sign,
+          ox,
+          oy,
+          treeX: tree.x,
+          treeY: tree.y,
+        });
+      }
+
+      sprite.on("pointerover", () => {
+        if (this.customizeMode) return;
+        this.setTreeSignVisible(tree.id, true);
+      });
+      sprite.on("pointerout", () => {
+        if (this.customizeMode) return;
+        if (this.selectedTreeId !== tree.id) {
+          this.setTreeSignVisible(tree.id, false);
+        }
+      });
       sprite.on("pointertap", (e) => {
         if (this.customizeMode) return;
         e.stopPropagation();
-        this.onSelect(tree);
+        this.selectTreeNode(tree);
       });
       this.treeLayer.addChild(sprite);
     }
@@ -357,8 +424,34 @@ export class ForestApp {
     this.app.stage.hitArea = this.app.screen;
     this.app.stage.on("pointertap", () => {
       if (this.customizeMode) return;
-      this.onSelect(null);
+      this.selectTreeNode(null);
     });
+    this.app.renderer.on("resize", () => {
+      this.app.stage.hitArea = this.app.screen;
+    });
+  }
+
+  private selectTreeNode(tree: TreeTraits | null): void {
+    const prevId = this.selectedTreeId;
+    this.selectedTreeId = tree?.id ?? null;
+
+    if (prevId != null && prevId !== this.selectedTreeId) {
+      this.setTreeSignVisible(prevId, false);
+    }
+    if (this.selectedTreeId != null) {
+      this.setTreeSignVisible(this.selectedTreeId, true);
+    }
+
+    this.onSelect(tree);
+  }
+
+  private setTreeSignVisible(treeId: number, visible: boolean): void {
+    const entry = this.treeSigns.get(treeId);
+    if (!entry) return;
+    entry.sign.visible = visible;
+    // Keep visible signs stacked above each other by tree depth
+    entry.sign.zIndex = visible ? 1_000_000 + entry.treeY : entry.treeY;
+    this.signLayer.sortChildren();
   }
 
   private seedWildlife(): void {
@@ -579,6 +672,7 @@ export class ForestApp {
   private updateWeather(): void {
     this.clearLayer(this.weatherLayer);
     const g = new Graphics();
+    g.eventMode = "none";
     const { weather, worldWidth, worldHeight } = this.config;
 
     if (weather === "rain") {
@@ -651,12 +745,14 @@ export class ForestApp {
 
     if (night > 0.02) {
       const g = new Graphics();
+      g.eventMode = "none";
       g.rect(0, 0, this.app.screen.width, this.app.screen.height);
       g.fill({ color: 0x0a1628, alpha: night * 0.5 });
       this.overlayLayer.addChild(g);
     }
 
     const bloom = new Graphics();
+    bloom.eventMode = "none";
     let anyLit = false;
     for (const lamp of this.lamps) {
       if (!lamp.lit) continue;
@@ -677,6 +773,7 @@ export class ForestApp {
 
   private updateWildlife(deltaMS: number): void {
     const g = new Graphics();
+    g.eventMode = "none";
     for (const w of this.wildlife) {
       w.x += w.vx * (deltaMS / 16);
       if (w.x < 20 || w.x > this.config.worldWidth - 20) w.vx *= -1;

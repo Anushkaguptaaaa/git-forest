@@ -32,6 +32,7 @@ export function ForestCanvas({ world }: ForestCanvasProps) {
 
   const customizeOpen = useForestStore((s) => s.customizeOpen);
   const decorBrush = useForestStore((s) => s.decorBrush);
+  const selectedTree = useForestStore((s) => s.selectedTree);
   const setSelectedDecor = useForestStore((s) => s.setSelectedDecor);
   const setSelectedDecorScale = useForestStore((s) => s.setSelectedDecorScale);
 
@@ -76,6 +77,12 @@ export function ForestCanvas({ world }: ForestCanvasProps) {
   useEffect(() => {
     appRef.current?.setDecorBrush(decorBrush);
   }, [decorBrush]);
+
+  useEffect(() => {
+    if (selectedTree === null) {
+      appRef.current?.clearTreeSelection();
+    }
+  }, [selectedTree]);
 
   return (
     <>

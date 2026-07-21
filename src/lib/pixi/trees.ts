@@ -1,6 +1,7 @@
 import { Container, Graphics } from "pixi.js";
 import type { Season, TreeSpecies, TreeTraits } from "@/lib/github/types";
 import { SEASON_PALETTE } from "@/lib/world/seasons";
+import { attachRepoSign } from "./treeSign";
 
 interface CanopyPalette {
   highlight: number;
@@ -390,6 +391,8 @@ export function drawTree(tree: TreeTraits, season: Season): Container {
   }
 
   root.addChild(g);
+  const sign = attachRepoSign(root, tree, h);
+  (root as Container & { repoSign?: Container }).repoSign = sign;
 
   const hitR = tree.form === "legendary" ? canopyR + 20 : canopyR + 12;
   root.hitArea = {
@@ -408,6 +411,7 @@ export function drawFireflies(
 ): void {
   if (tree.fireflies <= 0 || tree.isDead) return;
   const g = new Graphics();
+  g.eventMode = "none";
   const count = tree.form === "legendary" ? tree.fireflies + 4 : tree.fireflies;
   for (let i = 0; i < count; i++) {
     const phase = time * 0.002 + i * 1.7 + tree.id * 0.01;
