@@ -4,12 +4,12 @@ import { useEffect, useRef } from "react";
 import type { WorldConfig } from "@/lib/github/types";
 import { ForestApp } from "@/lib/pixi/ForestApp";
 import { useForestStore } from "@/store/forestStore";
+import { CustomizePanel } from "./CustomizePanel";
 
 interface ForestCanvasProps {
   world: WorldConfig;
 }
 
-/** Wait until the host has a real layout size (Pixi resizeTo needs it). */
 function waitForHostSize(el: HTMLElement): Promise<void> {
   if (el.clientWidth > 0 && el.clientHeight > 0) return Promise.resolve();
   return new Promise((resolve) => {
@@ -29,7 +29,12 @@ export function ForestCanvas({ world }: ForestCanvasProps) {
   const selectTree = useForestStore((s) => s.selectTree);
   const selectRef = useRef(selectTree);
   selectRef.current = selectTree;
-  // Guards React Strict Mode: older effect cleanups must not wipe a newer mount.
+
+  const customizeOpen = useForestStore((s) => s.customizeOpen);
+  const decorBrush = useForestStore((s) => s.decorBrush);
+  const setSelectedDecor = useForestStore((s) => s.setSelectedDecor);
+  const setSelectedDecorScale = useForestStore((s) => s.setSelectedDecorScale);
+
   const mountIdRef = useRef(0);
 
   useEffect(() => {
@@ -39,6 +44,10 @@ export function ForestCanvas({ world }: ForestCanvasProps) {
     const mountId = ++mountIdRef.current;
     let cancelled = false;
     const app = new ForestApp(world, (tree) => selectRef.current(tree));
+    app.setDecorSelectHandler((info) => {
+      setSelectedDecor(info);
+      if (info) setSelectedDecorScale(info.scale);
+    });
     appRef.current = app;
 
     void (async () => {
@@ -56,18 +65,34 @@ export function ForestCanvas({ world }: ForestCanvasProps) {
     return () => {
       cancelled = true;
       if (appRef.current === app) appRef.current = null;
-      // Do NOT host.replaceChildren() after async destroy — under Strict Mode
-      // that races and deletes the next mount's canvas (blank green screen).
       void app.destroy();
     };
-  }, [world]);
+  }, [world, setSelectedDecor, setSelectedDecorScale]);
+
+  useEffect(() => {
+    appRef.current?.setCustomizeMode(customizeOpen);
+  }, [customizeOpen]);
+
+  useEffect(() => {
+    appRef.current?.setDecorBrush(decorBrush);
+  }, [decorBrush]);
 
   return (
-    <div
-      ref={hostRef}
-      className="absolute inset-0 overflow-hidden bg-[#1a2e1a]"
-      aria-label="Explorable Git Forest"
-      data-map="meadow-v3"
-    />
+    <>
+      <div
+        ref={hostRef}
+        className="absolute inset-0 overflow-hidden bg-[#1a2e1a]"
+        aria-label="Explorable Git Forest"
+        data-map="meadow-v3"
+      />
+      <CustomizePanel
+        onDelete={() => appRef.current?.deleteSelectedDecor()}
+        onClearAll={() => {
+          if (window.confirm("Remove all custom props from this forest?")) {
+            appRef.current?.clearAllCustomDecor();
+          }
+        }}
+      />
+    </>
   );
 }

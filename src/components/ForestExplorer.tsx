@@ -20,6 +20,8 @@ interface ForestExplorerProps {
 export function ForestExplorer({ data }: ForestExplorerProps) {
   const world = useForestStore((s) => s.world);
   const setForest = useForestStore((s) => s.setForest);
+  const customizeOpen = useForestStore((s) => s.customizeOpen);
+  const setCustomizeOpen = useForestStore((s) => s.setCustomizeOpen);
   const season = world?.season;
   const weather = world?.weather;
 
@@ -35,10 +37,21 @@ export function ForestExplorer({ data }: ForestExplorerProps) {
       <div className="crt-overlay pointer-events-none absolute inset-0 z-20" aria-hidden />
 
       <header className="explorer-header">
-        <div className="explorer-panel">
-          <Link href="/" className="font-display explorer-back">
-            ← Git Forest
-          </Link>
+        <div className="explorer-header-left">
+          <div className="explorer-panel">
+            <Link href="/" className="font-display explorer-back">
+              ← Git Forest
+            </Link>
+          </div>
+          <button
+            type="button"
+            className={`explorer-panel font-display explorer-customize${
+              customizeOpen ? " is-active" : ""
+            }`}
+            onClick={() => setCustomizeOpen(!customizeOpen)}
+          >
+            Customize
+          </button>
         </div>
 
         <div className="explorer-panel explorer-profile">
@@ -66,7 +79,7 @@ export function ForestExplorer({ data }: ForestExplorerProps) {
       </header>
 
       <div className="explorer-hint font-pixel">
-        WASD / arrows · drag · scroll zoom · click trees · click lamps for light
+        WASD / arrows · drag · scroll zoom · click trees · click lamps · Customize to decorate
       </div>
 
       <RepoPopup />
