@@ -1,0 +1,32 @@
+{
+  "name": "git-forest",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A cozy pixel-art forest generated from any public GitHub profile",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@eslint/eslintrc": "^3.3.6",
+    "framer-motion": "^12.42.2",
+    "next": "^15.5.20",
+    "pixi.js": "^8.19.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.20",
+    "postcss": "^8.5.20",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3"
+  }
+}
