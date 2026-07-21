@@ -17,7 +17,7 @@ function px(n: number): number {
   return Math.round(n);
 }
 
-function quadPoint(
+export function quadPoint(
   t: number,
   x0: number,
   y0: number,
@@ -31,6 +31,49 @@ function quadPoint(
     x: u * u * x0 + 2 * u * t * x1 + t * t * x2,
     y: u * u * y0 + 2 * u * t * y1 + t * t * y2,
   };
+}
+
+export interface PathDef {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  halfW: number;
+}
+
+/** Shared path curves — used by dirt ribbons and fence props. */
+export function forestPathDefs(worldWidth: number, worldHeight: number): PathDef[] {
+  return [
+    {
+      x0: worldWidth * 0.0,
+      y0: worldHeight * 0.58,
+      x1: worldWidth * 0.32,
+      y1: worldHeight * 0.4,
+      x2: worldWidth * 0.55,
+      y2: worldHeight * 0.62,
+      halfW: 16,
+    },
+    {
+      x0: worldWidth * 0.55,
+      y0: worldHeight * 0.62,
+      x1: worldWidth * 0.78,
+      y1: worldHeight * 0.78,
+      x2: worldWidth * 1.0,
+      y2: worldHeight * 0.52,
+      halfW: 14,
+    },
+    {
+      x0: worldWidth * 0.42,
+      y0: worldHeight * 0.5,
+      x1: worldWidth * 0.5,
+      y1: worldHeight * 0.3,
+      x2: worldWidth * 0.7,
+      y2: worldHeight * 0.2,
+      halfW: 11,
+    },
+  ];
 }
 
 /**
@@ -48,7 +91,7 @@ export function buildForestFloor(
   const horizon = 0;
 
   root.addChild(drawSkyAndGrass(worldWidth, worldHeight, horizon, palette, rng));
-  root.addChild(drawPaths(worldWidth, worldHeight, horizon, rng));
+  root.addChild(drawPaths(worldWidth, worldHeight, rng));
   root.addChild(drawProps(worldWidth, worldHeight, horizon, season, rng));
 
   return root;
@@ -100,65 +143,16 @@ function drawSkyAndGrass(
   return g;
 }
 
-function drawPaths(
-  worldWidth: number,
-  worldHeight: number,
-  _horizon: number,
-  rng: Rng
-): Graphics {
+function drawPaths(worldWidth: number, worldHeight: number, rng: Rng): Graphics {
   const g = new Graphics();
-
-  const paths = [
-    {
-      x0: worldWidth * 0.0,
-      y0: worldHeight * 0.58,
-      x1: worldWidth * 0.32,
-      y1: worldHeight * 0.4,
-      x2: worldWidth * 0.55,
-      y2: worldHeight * 0.62,
-      halfW: 16,
-    },
-    {
-      x0: worldWidth * 0.55,
-      y0: worldHeight * 0.62,
-      x1: worldWidth * 0.78,
-      y1: worldHeight * 0.78,
-      x2: worldWidth * 1.0,
-      y2: worldHeight * 0.52,
-      halfW: 14,
-    },
-    {
-      x0: worldWidth * 0.42,
-      y0: worldHeight * 0.5,
-      x1: worldWidth * 0.5,
-      y1: worldHeight * 0.3,
-      x2: worldWidth * 0.7,
-      y2: worldHeight * 0.2,
-      halfW: 11,
-    },
-  ];
-
-  for (const path of paths) {
+  for (const path of forestPathDefs(worldWidth, worldHeight)) {
     drawDirtRibbon(g, path, rng);
   }
-
   return g;
 }
 
 /** Irregular dirt ribbon — polygon edges + speckled texture (no circle stamps). */
-function drawDirtRibbon(
-  g: Graphics,
-  path: {
-    x0: number;
-    y0: number;
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-    halfW: number;
-  },
-  rng: Rng
-): void {
+function drawDirtRibbon(g: Graphics, path: PathDef, rng: Rng): void {
   const steps = 40;
   const left: { x: number; y: number }[] = [];
   const right: { x: number; y: number }[] = [];
@@ -167,7 +161,6 @@ function drawDirtRibbon(
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const p = quadPoint(t, path.x0, path.y0, path.x1, path.y1, path.x2, path.y2);
-    // Tangent via nearby samples
     const t0 = Math.max(0, t - 0.01);
     const t1 = Math.min(1, t + 0.01);
     const a = quadPoint(t0, path.x0, path.y0, path.x1, path.y1, path.x2, path.y2);
@@ -177,11 +170,9 @@ function drawDirtRibbon(
     const len = Math.hypot(tx, ty) || 1;
     tx /= len;
     ty /= len;
-    // Perpendicular
     const nx = -ty;
     const ny = tx;
 
-    // Jagged width: slow undulation + pixel noise
     const w =
       path.halfW +
       Math.sin(t * Math.PI * 5 + path.halfW) * 3.5 +
@@ -193,7 +184,6 @@ function drawDirtRibbon(
     centers.push({ x: p.x, y: p.y, nx, ny, w });
   }
 
-  // Soft underlay (slightly wider, darker) so edges blend into grass
   const underL = left.map((p, i) => ({
     x: p.x + centers[i]!.nx * 3,
     y: p.y + centers[i]!.ny * 3,
@@ -203,11 +193,8 @@ function drawDirtRibbon(
     y: p.y - centers[i]!.ny * 3,
   }));
   fillRibbon(g, underL, underR, PATH.edge);
-
-  // Main dirt body
   fillRibbon(g, left, right, PATH.mid);
 
-  // Inner highlight stroke (narrower ribbon)
   const hiL = centers.map((c) => ({
     x: c.x + c.nx * (c.w * 0.35),
     y: c.y + c.ny * (c.w * 0.35),
@@ -218,23 +205,25 @@ function drawDirtRibbon(
   }));
   fillRibbon(g, hiL, hiR, PATH.light);
 
-  // Speckle texture — small dirt pixels / pebbles along the trail
   for (let i = 2; i < centers.length - 2; i += 1) {
     const c = centers[i]!;
     if (rng.chance(0.55)) {
       const ox = rng.float(-c.w * 0.55, c.w * 0.55);
       const oy = rng.float(-2, 2);
-      g.rect(px(c.x + c.nx * ox + c.ny * oy), px(c.y + c.ny * ox - c.nx * oy), rng.int(1, 3), rng.int(1, 2));
+      g.rect(
+        px(c.x + c.nx * ox + c.ny * oy),
+        px(c.y + c.ny * ox - c.nx * oy),
+        rng.int(1, 3),
+        rng.int(1, 2)
+      );
       g.fill(rng.chance(0.5) ? PATH.dark : PATH.light);
     }
     if (rng.chance(0.2)) {
-      // tiny pebble
       g.rect(px(c.x + rng.float(-c.w * 0.4, c.w * 0.4)), px(c.y + rng.float(-2, 2)), 2, 2);
       g.fill(0x8a7350);
     }
   }
 
-  // Occasional worn patches (darker ovals, sparse — not path stamps)
   for (let i = 4; i < centers.length - 4; i += 5) {
     if (!rng.chance(0.45)) continue;
     const c = centers[i]!;

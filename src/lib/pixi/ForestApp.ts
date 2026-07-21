@@ -83,12 +83,23 @@ export class ForestApp {
     // Lamp blooms draw above the night veil so lights actually cut through darkness
     this.app.stage.addChild(this.lightLayer);
 
+    // Lamps / mushrooms load before scatter
+    try {
+      await loadForestSprites();
+    } catch (err) {
+      console.warn("Forest decor sprites failed to load", err);
+    }
+
+    if (this.destroyed) {
+      this.safeDestroyApp(true);
+      return;
+    }
+
     this.buildGround();
     this.buildTrees();
 
-    try {
-      await loadForestSprites();
-      if (!this.destroyed) {
+    if (!this.destroyed) {
+      try {
         const horizon = this.config.worldHeight * WORLD_SKY_RATIO;
         const rng = createRng(this.config.seed ^ 0xdec0);
         const points = this.config.trees.map((t) => ({ x: t.x, y: t.y }));
@@ -101,9 +112,9 @@ export class ForestApp {
           points
         );
         this.lamps = lamps;
+      } catch (err) {
+        console.warn("Forest decor scatter failed", err);
       }
-    } catch (err) {
-      console.warn("Forest decor sprites failed to load", err);
     }
 
     if (this.destroyed) {
