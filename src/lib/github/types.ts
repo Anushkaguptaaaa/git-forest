@@ -9,6 +9,9 @@ export type TreeSpecies =
   | "dead"
   | "sapling";
 
+/** Visual silhouette — legendary = weeping elder (most commits) */
+export type TreeForm = "small" | "broad" | "tall" | "bare" | "legendary";
+
 export interface GitHubRepo {
   id: number;
   name: string;
@@ -51,6 +54,7 @@ export interface TreeTraits {
   url: string;
   language: string | null;
   species: TreeSpecies;
+  form: TreeForm;
   height: number;
   flowers: number;
   saplings: number;

@@ -40,7 +40,7 @@ export function commitProxyToHeight(size: number, stars: number): number {
   return Math.min(120, Math.max(24, Math.round(h)));
 }
 
-export function mapRepoToTraits(repo: GitHubRepo): Omit<TreeTraits, "x" | "y"> {
+export function mapRepoToTraits(repo: GitHubRepo): Omit<TreeTraits, "x" | "y" | "form"> {
   return {
     id: repo.id,
     name: repo.name,

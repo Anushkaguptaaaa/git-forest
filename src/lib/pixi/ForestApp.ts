@@ -2,6 +2,8 @@ import { Application, Container, Graphics } from "pixi.js";
 import type { TreeTraits, WorldConfig } from "@/lib/github/types";
 import { SEASON_PALETTE } from "@/lib/world/seasons";
 import { createRng } from "@/lib/world/rng";
+import { loadForestSprites, scatterForestProps } from "./decorSprites";
+import { WORLD_SKY_RATIO, buildForestFloor } from "./mapDecor";
 import { drawFireflies, drawTree } from "./trees";
 
 export type TreeSelectHandler = (tree: TreeTraits | null) => void;
@@ -49,9 +51,10 @@ export class ForestApp {
   private async doInit(canvasParent: HTMLElement): Promise<void> {
     if (this.destroyed) return;
 
+    const palette = SEASON_PALETTE[this.config.season];
     await this.app.init({
       resizeTo: canvasParent,
-      background: SEASON_PALETTE[this.config.season].skyBottom,
+      background: palette.grass,
       antialias: false,
       resolution: Math.min(window.devicePixelRatio || 1, 2),
       autoDensity: true,
@@ -77,7 +80,33 @@ export class ForestApp {
 
     this.buildGround();
     this.buildTrees();
+
+    try {
+      await loadForestSprites();
+      if (!this.destroyed) {
+        const horizon = this.config.worldHeight * WORLD_SKY_RATIO;
+        const rng = createRng(this.config.seed ^ 0xdec0);
+        const points = this.config.trees.map((t) => ({ x: t.x, y: t.y }));
+        scatterForestProps(
+          this.treeLayer,
+          this.config.worldWidth,
+          this.config.worldHeight,
+          horizon,
+          rng,
+          points
+        );
+      }
+    } catch (err) {
+      console.warn("Forest decor sprites failed to load", err);
+    }
+
+    if (this.destroyed) {
+      this.safeDestroyApp(true);
+      return;
+    }
+
     this.seedWildlife();
+    this.camera.zoom = this.fitZoom();
     this.centerCamera();
     this.bindInput();
 
@@ -85,59 +114,52 @@ export class ForestApp {
     this.ready = true;
   }
 
+  /** Minimum zoom so the forest always covers the viewport (no letterboxing). */
+  private minZoom(): number {
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    if (w <= 0 || h <= 0) return 1;
+    return Math.max(w / this.config.worldWidth, h / this.config.worldHeight);
+  }
+
+  private maxZoom(): number {
+    return Math.max(this.minZoom() * 3.2, 2.4);
+  }
+
+  /** Starting zoom: fill the screen, slightly closer so trees feel present */
+  private fitZoom(): number {
+    return this.minZoom() * 1.1;
+  }
+
+  private centerCamera(): void {
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    this.camera.zoom = clamp(this.camera.zoom, this.minZoom(), this.maxZoom());
+    this.camera.x = this.config.worldWidth / 2 - w / 2 / this.camera.zoom;
+    this.camera.y = this.config.worldHeight / 2 - h / 2 / this.camera.zoom;
+    this.applyCamera();
+  }
+
   private buildGround(): void {
     const { worldWidth, worldHeight, season, seed } = this.config;
-    const palette = SEASON_PALETTE[season];
     const rng = createRng(seed ^ 0xabcd);
-    const g = new Graphics();
-
-    // sky gradient via large rects (simple bands)
-    for (let i = 0; i < 8; i++) {
-      const t = i / 7;
-      const color = lerpColor(palette.skyTop, palette.skyBottom, t);
-      g.rect(-200, (worldHeight * t) / 2 - 100, worldWidth + 400, worldHeight / 14 + 4);
-      g.fill(color);
-    }
-
-    // grass field
-    g.rect(-100, worldHeight * 0.15, worldWidth + 200, worldHeight);
-    g.fill(palette.grass);
-
-    // grass tufts / flowers
-    for (let i = 0; i < 400; i++) {
-      const x = rng.float(0, worldWidth);
-      const y = rng.float(worldHeight * 0.18, worldHeight);
-      if (rng.chance(0.7)) {
-        g.rect(x, y, 2, 4);
-        g.fill(palette.grassDark);
-      } else {
-        g.circle(x, y, 2);
-        g.fill(palette.accent);
-      }
-    }
-
-    // path meandering through center
-    g.moveTo(worldWidth * 0.1, worldHeight * 0.55);
-    g.quadraticCurveTo(
-      worldWidth * 0.5,
-      worldHeight * 0.4,
-      worldWidth * 0.9,
-      worldHeight * 0.65
-    );
-    g.stroke({ width: 28, color: 0xc4a574, alpha: 0.55 });
-
-    this.groundLayer.addChild(g);
+    const floor = buildForestFloor(worldWidth, worldHeight, season, rng);
+    this.groundLayer.addChild(floor);
   }
 
   private buildTrees(): void {
+    // Trees use y as zIndex for painter's algorithm with decor sprites
+    this.treeLayer.sortableChildren = true;
     for (const tree of this.config.trees) {
       const sprite = drawTree(tree, this.config.season);
+      sprite.zIndex = tree.y;
       sprite.on("pointertap", (e) => {
         e.stopPropagation();
         this.onSelect(tree);
       });
       this.treeLayer.addChild(sprite);
     }
+    this.treeLayer.sortChildren();
 
     this.app.stage.eventMode = "static";
     this.app.stage.hitArea = this.app.screen;
@@ -157,17 +179,10 @@ export class ForestApp {
     }
   }
 
-  private centerCamera(): void {
-    const w = this.app.screen.width;
-    const h = this.app.screen.height;
-    this.camera.x = this.config.worldWidth / 2 - w / 2 / this.camera.zoom;
-    this.camera.y = this.config.worldHeight / 2 - h / 2 / this.camera.zoom;
-    this.applyCamera();
-  }
-
   private applyCamera(): void {
     const w = this.app.screen.width;
     const h = this.app.screen.height;
+    this.camera.zoom = clamp(this.camera.zoom, this.minZoom(), this.maxZoom());
     const maxX = Math.max(0, this.config.worldWidth - w / this.camera.zoom);
     const maxY = Math.max(0, this.config.worldHeight - h / this.camera.zoom);
     this.camera.x = clamp(this.camera.x, 0, maxX);
@@ -212,6 +227,21 @@ export class ForestApp {
       this.applyCamera();
     };
 
+    // Keep camera clamped when the canvas resizes
+    let lastW = this.app.screen.width;
+    let lastH = this.app.screen.height;
+    const onResizeTick = () => {
+      if (this.destroyed) return;
+      const w = this.app.screen.width;
+      const h = this.app.screen.height;
+      if (w !== lastW || h !== lastH) {
+        lastW = w;
+        lastH = h;
+        this.applyCamera();
+      }
+    };
+    this.app.ticker.add(onResizeTick);
+
     canvas.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("pointermove", onPointerMove);
@@ -223,12 +253,13 @@ export class ForestApp {
       canvas.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointermove", onPointerMove);
+      this.app.ticker.remove(onResizeTick);
     };
   }
 
   private zoomBy(delta: number): void {
     const prev = this.camera.zoom;
-    this.camera.zoom = clamp(prev + delta, 0.45, 2.2);
+    this.camera.zoom = clamp(prev + delta, this.minZoom(), this.maxZoom());
     const w = this.app.screen.width;
     const h = this.app.screen.height;
     const cx = this.camera.x + w / 2 / prev;
@@ -407,19 +438,6 @@ export class ForestApp {
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
-}
-
-function lerpColor(a: number, b: number, t: number): number {
-  const ar = (a >> 16) & 0xff;
-  const ag = (a >> 8) & 0xff;
-  const ab = a & 0xff;
-  const br = (b >> 16) & 0xff;
-  const bg = (b >> 8) & 0xff;
-  const bb = b & 0xff;
-  const r = Math.round(ar + (br - ar) * t);
-  const g = Math.round(ag + (bg - ag) * t);
-  const bl = Math.round(ab + (bb - ab) * t);
-  return (r << 16) | (g << 8) | bl;
 }
 
 /** 0 = day, 1 = night */

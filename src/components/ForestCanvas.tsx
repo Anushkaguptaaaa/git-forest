@@ -42,6 +42,7 @@ export function ForestCanvas({ world }: ForestCanvasProps) {
       ref={hostRef}
       className="absolute inset-0 overflow-hidden bg-[#1a2e1a]"
       aria-label="Explorable Git Forest"
+      data-map="meadow-v3"
     />
   );
 }

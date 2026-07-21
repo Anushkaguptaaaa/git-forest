@@ -23,7 +23,8 @@ export function RepoPopup() {
           <div className="repo-popup-head">
             <div>
               <p className="font-pixel repo-popup-meta">
-                {tree.species} · {tree.language ?? "unknown"}
+                {tree.form === "legendary" ? "elder" : tree.form} · {tree.species} ·{" "}
+                {tree.language ?? "unknown"}
               </p>
               <h2 className="font-display repo-popup-title">{tree.name}</h2>
             </div>
