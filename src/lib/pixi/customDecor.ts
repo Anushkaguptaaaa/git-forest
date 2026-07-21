@@ -1,8 +1,14 @@
 import { Assets, Container, Graphics, Sprite, Texture } from "pixi.js";
+import cherryBlossomUrl from "@/assets/cherry-blossom.png";
 import dandelionUrl from "@/assets/dandelion.png";
 import flowersUrl from "@/assets/flowers.png";
 import grassyStoneUrl from "@/assets/grassy-stone.png";
+import lampUrl from "@/assets/lamp.png";
+import lamppostUrl from "@/assets/lamppost.png";
+import lavenderUrl from "@/assets/lavender.png";
+import mushUrl from "@/assets/mush.png";
 import pinkFlowersUrl from "@/assets/pink-flowers.png";
+import pixelLavenderUrl from "@/assets/pixel-lavender.png";
 import purpleFlowersUrl from "@/assets/purple-flowers.png";
 import stoneUrl from "@/assets/stone.png";
 
@@ -11,10 +17,16 @@ function assetSrc(mod: string | { src: string }): string {
 }
 
 export type DecorKind =
+  | "cherry-blossom"
   | "dandelion"
   | "flowers"
   | "grassy-stone"
+  | "lamp"
+  | "lamppost"
+  | "lavender"
+  | "mushroom"
   | "pink-flowers"
+  | "pixel-lavender"
   | "purple-flowers"
   | "stone";
 
@@ -28,6 +40,14 @@ export interface DecorCatalogItem {
 }
 
 export const DECOR_CATALOG: DecorCatalogItem[] = [
+  {
+    id: "cherry-blossom",
+    label: "Cherry blossom",
+    defaultH: 48,
+    minH: 20,
+    maxH: 200,
+    url: assetSrc(cherryBlossomUrl as string | { src: string }),
+  },
   {
     id: "dandelion",
     label: "Dandelion",
@@ -53,12 +73,52 @@ export const DECOR_CATALOG: DecorCatalogItem[] = [
     url: assetSrc(grassyStoneUrl as string | { src: string }),
   },
   {
+    id: "lamp",
+    label: "Lamp",
+    defaultH: 64,
+    minH: 28,
+    maxH: 220,
+    url: assetSrc(lampUrl as string | { src: string }),
+  },
+  {
+    id: "lamppost",
+    label: "Lamp post",
+    defaultH: 72,
+    minH: 32,
+    maxH: 240,
+    url: assetSrc(lamppostUrl as string | { src: string }),
+  },
+  {
+    id: "lavender",
+    label: "Lavender",
+    defaultH: 40,
+    minH: 16,
+    maxH: 180,
+    url: assetSrc(lavenderUrl as string | { src: string }),
+  },
+  {
+    id: "mushroom",
+    label: "Mushroom",
+    defaultH: 28,
+    minH: 12,
+    maxH: 120,
+    url: assetSrc(mushUrl as string | { src: string }),
+  },
+  {
     id: "pink-flowers",
     label: "Pink flowers",
     defaultH: 34,
     minH: 14,
     maxH: 150,
     url: assetSrc(pinkFlowersUrl as string | { src: string }),
+  },
+  {
+    id: "pixel-lavender",
+    label: "Pixel lavender",
+    defaultH: 36,
+    minH: 14,
+    maxH: 160,
+    url: assetSrc(pixelLavenderUrl as string | { src: string }),
   },
   {
     id: "purple-flowers",

@@ -149,33 +149,12 @@ body {
     linear-gradient(180deg, #1a3a4a 0%, #1e4a28 45%, #0f1f10 100%);
 }
 
-.forest-bg::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  opacity: 0.35;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 64 64' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M32 8 L24 28 L28 28 L20 48 L44 48 L36 28 L40 28 Z' fill='%231a2e0a'/%3E%3C/svg%3E");
-  background-size: 96px 96px;
-  background-position: center bottom;
-  background-repeat: repeat-x;
-  animation: canopy-drift 28s ease-in-out infinite alternate;
-}
-
 .forest-bg::after {
   content: "";
   position: absolute;
   inset: 0;
   background: radial-gradient(circle at 50% 30%, transparent 0%, rgba(10, 20, 8, 0.45) 100%);
   pointer-events: none;
-}
-
-@keyframes canopy-drift {
-  from {
-    background-position: 0% bottom;
-  }
-  to {
-    background-position: 8% bottom;
-  }
 }
 
 /* Subtle CRT / scanline vibe */
