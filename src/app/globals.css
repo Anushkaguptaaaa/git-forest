@@ -459,6 +459,10 @@ body {
   gap: 0.5rem;
 }
 
+.repo-popup-stats--3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
 .repo-stat {
   border: 1px solid #c4a574;
   background: #efe0bc;
@@ -477,11 +481,6 @@ body {
   color: #2c1810;
 }
 
-.repo-stat p {
-  font-size: 10px;
-  color: #7a6548;
-}
-
 .repo-popup-archived {
   margin-bottom: 0.75rem;
   border: 1px solid #6b5e4f;
@@ -489,6 +488,12 @@ body {
   padding: 0.35rem 0.5rem;
   font-size: 0.75rem;
   color: #5c4a3a;
+}
+
+.repo-popup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .repo-popup-link {
@@ -499,6 +504,17 @@ body {
   padding: 0.6rem;
   font-size: 0.75rem;
   box-sizing: border-box;
+}
+
+.repo-popup-link--live {
+  background: #5a7a3a;
+  color: #f3e6c8;
+  border-color: #2c3d1a;
+  box-shadow: 3px 3px 0 #1a1208;
+}
+
+.repo-popup-link--live:hover {
+  background: #6b8f48;
 }
 
 /* Error page */

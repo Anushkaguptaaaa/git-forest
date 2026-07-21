@@ -22,6 +22,10 @@ export interface GitHubRepo {
   stars: number;
   forks: number;
   openIssues: number;
+  /** Commit count on default branch; null when unavailable (e.g. REST-only fetch) */
+  commits: number | null;
+  /** Deployed app / project website from the repo homepage field */
+  homepageUrl: string | null;
   isArchived: boolean;
   isFork: boolean;
   pushedAt: string | null;
@@ -64,6 +68,8 @@ export interface TreeTraits {
   stars: number;
   forks: number;
   openIssues: number;
+  commits: number | null;
+  homepageUrl: string | null;
   x: number;
   y: number;
 }

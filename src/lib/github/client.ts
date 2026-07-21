@@ -29,11 +29,19 @@ const LANGUAGE_QUERY = `
           stargazerCount
           forkCount
           issues(states: OPEN) { totalCount }
+          homepageUrl
           isArchived
           isFork
           pushedAt
           createdAt
           diskUsage
+          defaultBranchRef {
+            target {
+              ... on Commit {
+                history { totalCount }
+              }
+            }
+          }
         }
       }
     }
@@ -50,11 +58,15 @@ interface GraphQLRepoNode {
   stargazerCount: number;
   forkCount: number;
   issues: { totalCount: number };
+  homepageUrl: string | null;
   isArchived: boolean;
   isFork: boolean;
   pushedAt: string | null;
   createdAt: string;
   diskUsage: number;
+  defaultBranchRef: {
+    target: { history: { totalCount: number } } | null;
+  } | null;
 }
 
 interface GraphQLUser {
@@ -72,6 +84,13 @@ interface GraphQLUser {
   };
 }
 
+function normalizeHomepage(url: string | null | undefined): string | null {
+  const raw = url?.trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return `https://${raw}`;
+}
+
 function mapRepo(node: GraphQLRepoNode): GitHubRepo {
   return {
     id: node.databaseId,
@@ -83,6 +102,8 @@ function mapRepo(node: GraphQLRepoNode): GitHubRepo {
     stars: node.stargazerCount,
     forks: node.forkCount,
     openIssues: node.issues.totalCount,
+    commits: node.defaultBranchRef?.target?.history.totalCount ?? null,
+    homepageUrl: normalizeHomepage(node.homepageUrl),
     isArchived: node.isArchived,
     isFork: node.isFork,
     pushedAt: node.pushedAt,
@@ -201,6 +222,7 @@ async function fetchViaRest(username: string, token?: string): Promise<ForestDat
     full_name: string;
     description: string | null;
     html_url: string;
+    homepage: string | null;
     language: string | null;
     stargazers_count: number;
     forks_count: number;
@@ -224,6 +246,9 @@ async function fetchViaRest(username: string, token?: string): Promise<ForestDat
       stars: r.stargazers_count,
       forks: r.forks_count,
       openIssues: r.open_issues_count,
+      // REST list endpoint has no commit total; GraphQL path fills this in
+      commits: null,
+      homepageUrl: normalizeHomepage(r.homepage),
       isArchived: r.archived,
       isFork: r.fork,
       pushedAt: r.pushed_at,
@@ -264,4 +289,43 @@ export async function fetchForestData(username: string): Promise<ForestData> {
   }
 
   return fetchViaRest(cleaned);
+}
+
+const REPO_FULL_NAME_RE = /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/;
+
+/** Commit total via REST (no GraphQL / token required). Uses Link: rel="last". */
+export async function fetchRepoCommitCount(fullName: string): Promise<number> {
+  const cleaned = fullName.trim();
+  if (!REPO_FULL_NAME_RE.test(cleaned)) {
+    throw new Error("Invalid repository name");
+  }
+
+  const headers: HeadersInit = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "git-forest",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+  const token = process.env.GITHUB_TOKEN;
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(
+    `https://api.github.com/repos/${cleaned}/commits?per_page=1`,
+    { headers, next: { revalidate: 300 } }
+  );
+
+  // Empty repository
+  if (res.status === 409) return 0;
+  if (!res.ok) {
+    throw new Error(`GitHub commits error: ${res.status}`);
+  }
+
+  const link = res.headers.get("link");
+  if (link) {
+    const last = link.split(",").find((part) => part.includes('rel="last"'));
+    const page = last?.match(/[?&]page=(\d+)/)?.[1];
+    if (page) return Number(page);
+  }
+
+  const body = (await res.json()) as unknown[];
+  return Array.isArray(body) ? body.length : 0;
 }

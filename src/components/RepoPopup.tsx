@@ -1,11 +1,44 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useForestStore } from "@/store/forestStore";
 
 export function RepoPopup() {
   const tree = useForestStore((s) => s.selectedTree);
   const selectTree = useForestStore((s) => s.selectTree);
+  const setTreeCommits = useForestStore((s) => s.setTreeCommits);
+  const [commitsLoading, setCommitsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!tree || tree.commits != null) {
+      setCommitsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCommitsLoading(true);
+
+    fetch(`/api/github/commits?repo=${encodeURIComponent(tree.fullName)}`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error("commit fetch failed");
+        return res.json() as Promise<{ commits: number }>;
+      })
+      .then((json) => {
+        if (cancelled) return;
+        setTreeCommits(tree.id, json.commits);
+      })
+      .catch(() => {
+        /* leave as — if rate-limited / network error */
+      })
+      .finally(() => {
+        if (!cancelled) setCommitsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tree, setTreeCommits]);
 
   return (
     <AnimatePresence>
@@ -40,25 +73,40 @@ export function RepoPopup() {
 
           {tree.description && <p className="repo-popup-desc">{tree.description}</p>}
 
-          <dl className="repo-popup-stats">
-            <Stat label="Stars" value={tree.stars} hint="flowers" />
-            <Stat label="Forks" value={tree.forks} hint="saplings" />
-            <Stat label="Issues" value={tree.openIssues} hint="nests" />
-            <Stat label="Height" value={tree.height} hint="activity" />
+          <dl className="repo-popup-stats repo-popup-stats--3">
+            <Stat
+              label="Commits"
+              value={tree.commits}
+              loading={commitsLoading && tree.commits == null}
+            />
+            <Stat label="Stars" value={tree.stars} />
+            <Stat label="Forks" value={tree.forks} />
           </dl>
 
           {tree.isDead && (
             <p className="repo-popup-archived">Archived — a quiet deadwood in the grove.</p>
           )}
 
-          <a
-            href={tree.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="pixel-btn repo-popup-link"
-          >
-            Open on GitHub
-          </a>
+          <div className="repo-popup-actions">
+            {tree.homepageUrl && (
+              <a
+                href={tree.homepageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="pixel-btn repo-popup-link repo-popup-link--live"
+              >
+                Open live app
+              </a>
+            )}
+            <a
+              href={tree.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="pixel-btn repo-popup-link"
+            >
+              Open on GitHub
+            </a>
+          </div>
         </motion.aside>
       )}
     </AnimatePresence>
@@ -68,17 +116,18 @@ export function RepoPopup() {
 function Stat({
   label,
   value,
-  hint,
+  loading = false,
 }: {
   label: string;
-  value: number;
-  hint: string;
+  value: number | null;
+  loading?: boolean;
 }) {
   return (
     <div className="repo-stat">
       <dt>{label}</dt>
-      <dd className="font-display">{value.toLocaleString()}</dd>
-      <p>{hint}</p>
+      <dd className="font-display">
+        {loading ? "…" : value == null ? "—" : value.toLocaleString()}
+      </dd>
     </div>
   );
 }

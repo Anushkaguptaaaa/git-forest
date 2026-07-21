@@ -17,6 +17,7 @@ interface ForestState {
   setError: (error: string | null) => void;
   setForest: (data: ForestData, world: WorldConfig) => void;
   selectTree: (tree: TreeTraits | null) => void;
+  setTreeCommits: (treeId: number, commits: number) => void;
   setCustomizeOpen: (open: boolean) => void;
   setDecorBrush: (brush: DecorKind | null) => void;
   setSelectedDecor: (
@@ -52,6 +53,29 @@ export const useForestStore = create<ForestState>((set) => ({
       selectedDecorKind: null,
     }),
   selectTree: (tree) => set({ selectedTree: tree }),
+  setTreeCommits: (treeId, commits) =>
+    set((s) => ({
+      selectedTree:
+        s.selectedTree?.id === treeId
+          ? { ...s.selectedTree, commits }
+          : s.selectedTree,
+      world: s.world
+        ? {
+            ...s.world,
+            trees: s.world.trees.map((t) =>
+              t.id === treeId ? { ...t, commits } : t
+            ),
+          }
+        : null,
+      data: s.data
+        ? {
+            ...s.data,
+            repos: s.data.repos.map((r) =>
+              r.id === treeId ? { ...r, commits } : r
+            ),
+          }
+        : null,
+    })),
   setCustomizeOpen: (open) =>
     set(
       open

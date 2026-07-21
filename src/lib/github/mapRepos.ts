@@ -58,5 +58,7 @@ export function mapRepoToTraits(repo: GitHubRepo): Omit<TreeTraits, "x" | "y" | 
     stars: repo.stars,
     forks: repo.forks,
     openIssues: repo.openIssues,
+    commits: repo.commits,
+    homepageUrl: repo.homepageUrl,
   };
 }
