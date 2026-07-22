@@ -101,10 +101,10 @@ export function ForestExplorer({ data }: ForestExplorerProps) {
 
       <div className="explorer-hint font-pixel">
         <p className="explorer-hint-lore">
-          Trees quiet for a year grow fruit · two years, fruit falls
+          Trees quiet for a year grow fruit· two years, fruit falls
         </p>
         <p className="explorer-hint-controls">
-          Scroll zoom · drag to pan · Customize to rearrange
+          Scroll zoom · drag to pan · open Customize to place props &amp; move trees
         </p>
       </div>
 

@@ -633,12 +633,15 @@ body {
 }
 
 .customize-help {
-  margin-top: 0.5rem;
-  font-size: 7px;
-  line-height: 1.5;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  margin-top: 0.65rem;
+  font-size: 8px;
+  line-height: 2;
+  letter-spacing: 0.03em;
   color: #8b6914;
+}
+
+.customize-help p + p {
+  margin-top: 0.45rem;
 }
 
 .customize-grid {

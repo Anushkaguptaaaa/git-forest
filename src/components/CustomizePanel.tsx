@@ -117,10 +117,10 @@ export function CustomizePanel({ onDelete, onClearAll }: CustomizePanelProps) {
         </button>
       </div>
 
-      <p className="font-pixel customize-help">
-        Drag the title bar to move this panel · drag trees to rearrange · place props · corners
-        resize · top knob tilts
-      </p>
+      <div className="font-pixel customize-help">
+        <p>Click a tile to choose it, then click anywhere in the forest to place it.</p>
+        <p>Drag trees to move them. Drag this panel&apos;s title to move it aside.</p>
+      </div>
 
       <div className="customize-grid">
         {DECOR_CATALOG.map((item) => {
