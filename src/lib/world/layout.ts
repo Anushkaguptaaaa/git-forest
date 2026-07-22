@@ -3,8 +3,10 @@ import type { ForestData, TreeForm, TreeTraits, WorldConfig } from "@/lib/github
 import { createRng } from "./rng";
 import { hashUsername } from "./seed";
 import { seasonFromSeed, weatherFromSeed, loadSeasonOverride } from "./seasons";
+import { applySavedTreePositions } from "./treePositions";
 
-const TILE = 48;
+/** Spacing between tree bases — drives how big the meadow grows */
+const SPACING = 78;
 const MIN_DIST = 64;
 
 function assignForms(
@@ -73,6 +75,8 @@ function placeTrees(
       const i = placed.length;
       x = margin + (i % cols) * MIN_DIST + rng.float(0, 16);
       y = margin + Math.floor(i / cols) * MIN_DIST + rng.float(0, 16);
+      x = Math.min(worldWidth - margin, Math.max(margin, x));
+      y = Math.min(worldHeight - margin, Math.max(margin, y));
     }
 
     placed.push({ ...trait, x, y });
@@ -80,6 +84,16 @@ function placeTrees(
 
   placed.sort((a, b) => a.y - b.y);
   return placed;
+}
+
+/** Grow the meadow with repo count — small forests stay compact, large ones sprawl. */
+function worldSizeForCount(count: number): { worldWidth: number; worldHeight: number } {
+  const n = Math.max(1, count);
+  const cols = Math.max(3, Math.ceil(Math.sqrt(n * 1.3)));
+  const rows = Math.max(3, Math.ceil(n / cols));
+  const worldWidth = Math.max(960, Math.round(cols * SPACING + 220));
+  const worldHeight = Math.max(720, Math.round(rows * SPACING + 220));
+  return { worldWidth, worldHeight };
 }
 
 export function buildWorld(data: ForestData): WorldConfig {
@@ -97,13 +111,9 @@ export function buildWorld(data: ForestData): WorldConfig {
       .map(mapRepoToTraits)
   );
 
-  const count = Math.max(1, baseTraits.length);
-  const cols = Math.ceil(Math.sqrt(count * 1.4));
-  const rows = Math.ceil(count / cols);
-  const worldWidth = Math.max(1200, cols * TILE * 2.2 + 200);
-  const worldHeight = Math.max(900, rows * TILE * 2.2 + 200);
-
-  const trees = placeTrees(baseTraits, rng, worldWidth, worldHeight);
+  const { worldWidth, worldHeight } = worldSizeForCount(baseTraits.length);
+  const placed = placeTrees(baseTraits, rng, worldWidth, worldHeight);
+  const trees = applySavedTreePositions(data.profile.login, placed);
 
   return {
     seed,

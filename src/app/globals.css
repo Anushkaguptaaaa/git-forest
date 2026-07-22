@@ -568,12 +568,10 @@ body {
 }
 
 
-/* Customize panel */
+/* Customize panel — top-left by default, draggable via title bar */
 .customize-panel {
   pointer-events: auto;
   position: absolute;
-  top: 4.75rem;
-  left: 1rem;
   z-index: 35;
   width: min(20rem, calc(100vw - 2rem));
   max-height: min(70dvh, 32rem);
@@ -591,14 +589,29 @@ body {
   gap: 0.5rem;
 }
 
+.customize-panel-drag {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  margin: -0.25rem -0.25rem 0;
+  padding: 0.25rem;
+  border-radius: 2px;
+}
+
+.customize-panel-drag:active {
+  cursor: grabbing;
+}
+
 .customize-title {
   font-size: 1.25rem;
   color: #2c1810;
+  pointer-events: none;
 }
 
 .customize-done {
   padding: 0.25rem 0.5rem;
   font-size: 0.7rem;
+  cursor: pointer;
 }
 
 .customize-help {

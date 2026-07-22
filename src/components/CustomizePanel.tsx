@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DECOR_CATALOG, getDecorItem } from "@/lib/pixi/customDecor";
 import { useForestStore } from "@/store/forestStore";
 
@@ -8,6 +9,8 @@ interface CustomizePanelProps {
   onClearAll: () => void;
 }
 
+const DEFAULT_POS = { x: 16, y: 76 };
+
 export function CustomizePanel({ onDelete, onClearAll }: CustomizePanelProps) {
   const open = useForestStore((s) => s.customizeOpen);
   const brush = useForestStore((s) => s.decorBrush);
@@ -15,6 +18,71 @@ export function CustomizePanel({ onDelete, onClearAll }: CustomizePanelProps) {
   const selectedKind = useForestStore((s) => s.selectedDecorKind);
   const setCustomizeOpen = useForestStore((s) => s.setCustomizeOpen);
   const setDecorBrush = useForestStore((s) => s.setDecorBrush);
+
+  const [pos, setPos] = useState(DEFAULT_POS);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+  } | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
+
+  // Reset to top-left whenever customize opens
+  useEffect(() => {
+    if (open) setPos(DEFAULT_POS);
+  }, [open]);
+
+  const clampToViewport = useCallback((x: number, y: number) => {
+    const el = panelRef.current;
+    const w = el?.offsetWidth ?? 320;
+    const h = el?.offsetHeight ?? 200;
+    const maxX = Math.max(8, window.innerWidth - w - 8);
+    const maxY = Math.max(8, window.innerHeight - h - 8);
+    return {
+      x: Math.min(maxX, Math.max(8, x)),
+      y: Math.min(maxY, Math.max(8, y)),
+    };
+  }, []);
+
+  const onDragPointerDown = (e: React.PointerEvent) => {
+    // Only left button / primary touch; ignore interactive controls in the head
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("button")) return;
+
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: pos.x,
+      origY: pos.y,
+    };
+  };
+
+  const onDragPointerMove = (e: React.PointerEvent) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    const next = clampToViewport(
+      drag.origX + (e.clientX - drag.startX),
+      drag.origY + (e.clientY - drag.startY)
+    );
+    setPos(next);
+  };
+
+  const onDragPointerUp = (e: React.PointerEvent) => {
+    if (dragRef.current?.pointerId === e.pointerId) {
+      dragRef.current = null;
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch {
+        /* already released */
+      }
+    }
+  };
 
   if (!open) return null;
 
@@ -25,8 +93,20 @@ export function CustomizePanel({ onDelete, onClearAll }: CustomizePanelProps) {
       : null;
 
   return (
-    <aside className="customize-panel" role="dialog" aria-label="Customize forest">
-      <div className="customize-panel-head">
+    <aside
+      ref={panelRef}
+      className="customize-panel"
+      role="dialog"
+      aria-label="Customize forest"
+      style={{ left: pos.x, top: pos.y }}
+    >
+      <div
+        className="customize-panel-head customize-panel-drag"
+        onPointerDown={onDragPointerDown}
+        onPointerMove={onDragPointerMove}
+        onPointerUp={onDragPointerUp}
+        onPointerCancel={onDragPointerUp}
+      >
         <p className="font-display customize-title">Customize</p>
         <button
           type="button"
@@ -38,8 +118,8 @@ export function CustomizePanel({ onDelete, onClearAll }: CustomizePanelProps) {
       </div>
 
       <p className="font-pixel customize-help">
-        Place · drag to move · corner handles to resize · top knob to tilt · [ ] to nudge angle · del
-        to remove
+        Drag the title bar to move this panel · drag trees to rearrange · place props · corners
+        resize · top knob tilts
       </p>
 
       <div className="customize-grid">

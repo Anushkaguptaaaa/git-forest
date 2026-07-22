@@ -77,6 +77,18 @@ function blob(
   g.fill(color);
 }
 
+/** Tiny pixel apple — age signal for quiet repos */
+function drawApple(g: Graphics, x: number, y: number): void {
+  g.circle(px(x), px(y), 2.5);
+  g.fill(0xd62828);
+  g.circle(px(x - 0.6), px(y - 0.7), 1);
+  g.fill(0xff6b5c);
+  g.rect(px(x), px(y - 3.5), 1, 2);
+  g.fill(0x3d6b24);
+  g.rect(px(x + 1), px(y - 3.5), 2, 1);
+  g.fill(0x5aaa32);
+}
+
 function drawTrunk(
   g: Graphics,
   trunkH: number,
@@ -370,6 +382,34 @@ export function drawTree(tree: TreeTraits, season: Season): Container {
       const fy = -h * 0.55 + Math.sin(angle) * canopyR * 0.35;
       g.rect(px(fx - 1), px(fy - 1), 3, 3);
       g.fill(flowerColor);
+    }
+  }
+
+  // ripe fruits — repos quiet for 1y+ (3–4 apples, spread across the canopy)
+  if (tree.fruits > 0 && !tree.isDead && tree.form !== "bare") {
+    const count = Math.min(4, tree.fruits);
+    // Fixed offsets so fruits sit in different canopy lobes, not piled near the trunk
+    const slots: [number, number][] = [
+      [-0.55, -0.72],
+      [0.5, -0.68],
+      [0.05, -0.92],
+      [-0.25, -0.55],
+    ];
+    for (let i = 0; i < count; i++) {
+      const [ox, oy] = slots[i]!;
+      // slight per-tree wobble so neighbors don't look identical
+      const wobble = ((tree.id * (i + 3)) % 7) - 3;
+      const fx = ox * canopyR + wobble * 0.4;
+      const fy = oy * h + wobble * 0.15;
+      drawApple(g, fx, fy);
+    }
+  }
+
+  // fallen fruit under very quiet trees (2y+)
+  if (tree.fallenFruit > 0 && !tree.isDead) {
+    for (let i = 0; i < tree.fallenFruit; i++) {
+      const fx = -8 + i * 14 + (tree.id % 5) - 2;
+      drawApple(g, fx, 2 + (i % 2));
     }
   }
 

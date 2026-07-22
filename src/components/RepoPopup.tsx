@@ -86,6 +86,13 @@ export function RepoPopup() {
           {tree.isDead && (
             <p className="repo-popup-archived">Archived — a quiet deadwood in the grove.</p>
           )}
+          {!tree.isDead && tree.fruits > 0 && (
+            <p className="repo-popup-archived">
+              {tree.fallenFruit > 0
+                ? "Quiet for over two years — fruiting & fallen apples."
+                : "Quiet for over a year — ripe enough to fruit."}
+            </p>
+          )}
 
           <div className="repo-popup-actions">
             {tree.homepageUrl && (

@@ -65,6 +65,10 @@ export interface TreeTraits {
   nests: number;
   fireflies: number;
   isDead: boolean;
+  /** Red canopy fruits when last push is ≥1 year ago */
+  fruits: number;
+  /** Fallen fruits under the tree when last push is ≥2 years ago */
+  fallenFruit: number;
   stars: number;
   forks: number;
   openIssues: number;

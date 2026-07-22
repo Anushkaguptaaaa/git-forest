@@ -2,6 +2,7 @@ import { Application, Container, Graphics } from "pixi.js";
 import type { Season, TreeTraits, Weather, WorldConfig } from "@/lib/github/types";
 import { SEASON_PALETTE } from "@/lib/world/seasons";
 import { createRng } from "@/lib/world/rng";
+import { saveTreePositions } from "@/lib/world/treePositions";
 import {
   DECOR_CATALOG,
   PlacedDecor,
@@ -46,7 +47,14 @@ export class ForestApp {
   private ready = false;
   private initPromise: Promise<void> | null = null;
   private particles: { x: number; y: number; vx: number; vy: number; life: number }[] = [];
-  private wildlife: { x: number; y: number; vx: number; type: "bird" | "bunny" }[] = [];
+  private butterflies: {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    color: number;
+    phase: number;
+  }[] = [];
   private lamps: ForestLamp[] = [];
   private cleanupInput: (() => void) | null = null;
   private selectedTreeId: number | null = null;
@@ -64,6 +72,8 @@ export class ForestApp {
   private resizeStartHeight = 0;
   private resizeStartDist = 1;
   private panCandidate = false;
+  private treeDragId: number | null = null;
+  private treeDragMoved = false;
 
   constructor(config: WorldConfig, onSelect: TreeSelectHandler) {
     this.app = new Application();
@@ -141,10 +151,12 @@ export class ForestApp {
     this.lamps = [];
     this.particles = [];
 
+    this.matchWorldToViewport();
     this.buildGround();
     this.buildTrees();
     this.scatterMapProps();
     this.restoreCustomDecor();
+    this.seedButterflies();
   }
 
   setSelectedDecorScale(scale: number): void {
@@ -230,6 +242,8 @@ export class ForestApp {
       return;
     }
 
+    // Expand meadow to the viewport aspect so contain-zoom fills the screen (no green bars)
+    this.matchWorldToViewport();
     this.buildGround();
     this.buildTrees();
     this.restoreCustomDecor();
@@ -243,7 +257,7 @@ export class ForestApp {
       return;
     }
 
-    this.seedWildlife();
+    this.seedButterflies();
     this.camera.zoom = this.fitZoom();
     this.centerCamera();
     this.bindInput();
@@ -383,18 +397,29 @@ export class ForestApp {
   }
 
   private minZoom(): number {
-    const w = this.app.screen.width;
-    const h = this.app.screen.height;
-    if (w <= 0 || h <= 0) return 1;
-    return Math.max(w / this.config.worldWidth, h / this.config.worldHeight);
+    // Contain: entire meadow visible — no forced pan to see the edges
+    return this.containZoom();
   }
 
   private maxZoom(): number {
-    return Math.max(this.minZoom() * 3.2, 2.4);
+    return Math.max(this.containZoom() * 4.5, 2.8);
+  }
+
+  private containZoom(): number {
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    if (w <= 0 || h <= 0) return 1;
+    // Exact fit — world aspect is matched to the viewport so this fills edge-to-edge
+    return Math.min(w / this.config.worldWidth, h / this.config.worldHeight);
   }
 
   private fitZoom(): number {
-    return this.minZoom() * 1.1;
+    const contain = this.containZoom();
+    // Small forests: fill the screen.
+    // Large forests: start a bit closer so trees stay readable (pan to explore).
+    const comfortable = Math.min(1.05, this.maxZoom());
+    if (contain >= comfortable * 0.92) return contain;
+    return comfortable;
   }
 
   private centerCamera(): void {
@@ -404,6 +429,54 @@ export class ForestApp {
     this.camera.x = this.config.worldWidth / 2 - w / 2 / this.camera.zoom;
     this.camera.y = this.config.worldHeight / 2 - h / 2 / this.camera.zoom;
     this.applyCamera();
+  }
+
+  /** True when the whole world fits in the view at the current zoom (no room to pan). */
+  private worldFitsInView(): boolean {
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    const viewW = w / this.camera.zoom;
+    const viewH = h / this.camera.zoom;
+    return viewW >= this.config.worldWidth - 0.5 && viewH >= this.config.worldHeight - 0.5;
+  }
+
+  /**
+   * Grow worldWidth/Height so the meadow aspect matches the screen.
+   * Prevents letterboxed green strips when the camera fits the whole forest.
+   */
+  private matchWorldToViewport(): boolean {
+    const sw = this.app.screen.width;
+    const sh = this.app.screen.height;
+    if (sw <= 0 || sh <= 0) return false;
+
+    const aspect = sw / sh;
+    let ww = this.config.worldWidth;
+    let wh = this.config.worldHeight;
+
+    // Keep room for every tree (saved positions may sit near edges)
+    let needW = ww;
+    let needH = wh;
+    for (const t of this.config.trees) {
+      needW = Math.max(needW, t.x + 80);
+      needH = Math.max(needH, t.y + 80);
+    }
+    ww = Math.max(ww, needW);
+    wh = Math.max(wh, needH);
+
+    if (ww / wh < aspect) {
+      ww = Math.round(wh * aspect);
+    } else {
+      wh = Math.round(ww / aspect);
+    }
+
+    if (ww === this.config.worldWidth && wh === this.config.worldHeight) return false;
+    this.config = { ...this.config, worldWidth: ww, worldHeight: wh };
+    return true;
+  }
+
+  private rebuildGroundOnly(): void {
+    this.clearLayer(this.groundLayer);
+    this.buildGround();
   }
 
   private buildGround(): void {
@@ -487,15 +560,73 @@ export class ForestApp {
     this.signLayer.sortChildren();
   }
 
-  private seedWildlife(): void {
-    const rng = createRng(this.config.seed ^ 0x2222);
-    const count = Math.min(12, 3 + Math.floor(this.config.trees.length / 8));
+  private hitTreeAt(worldX: number, worldY: number): TreeTraits | null {
+    const sorted = [...this.config.trees].sort((a, b) => b.y - a.y);
+    for (const tree of sorted) {
+      const h = tree.height;
+      const canopyR =
+        tree.form === "legendary" ? h * 0.55 : Math.max(14, h * 0.4);
+      const dx = worldX - tree.x;
+      const dy = worldY - tree.y;
+      if (Math.abs(dx) <= canopyR + 12 && dy <= 14 && dy >= -h - 16) {
+        return tree;
+      }
+    }
+    return null;
+  }
+
+  private setTreeWorldPosition(treeId: number, x: number, y: number): void {
+    const tree = this.config.trees.find((t) => t.id === treeId);
+    const sprite = this.treeNodes.get(treeId);
+    if (!tree || !sprite) return;
+
+    const nx = clamp(x, 40, this.config.worldWidth - 40);
+    const ny = clamp(y, 40, this.config.worldHeight - 40);
+    tree.x = nx;
+    tree.y = ny;
+    sprite.x = nx;
+    sprite.y = ny;
+    sprite.zIndex = ny;
+
+    const sign = this.treeSigns.get(treeId);
+    if (sign) {
+      sign.treeX = nx;
+      sign.treeY = ny;
+      sign.sign.x = nx + sign.ox;
+      sign.sign.y = ny + sign.oy;
+      const boosted = sign.sign.visible;
+      sign.sign.zIndex = boosted ? 1_000_000 + ny : ny;
+    }
+
+    this.treeLayer.sortChildren();
+    this.signLayer.sortChildren();
+  }
+
+  private persistTreePositions(): void {
+    saveTreePositions(this.config.username, this.config.trees);
+  }
+
+  private seedButterflies(): void {
+    const rng = createRng(this.config.seed ^ 0xb17f);
+    this.butterflies = [];
+    if (this.config.season === "winter") return;
+
+    const palette = [0xff6b9d, 0xffc857, 0x7ec8ff, 0xc9a0ff, 0xff8c5a, 0xffffff];
+    const boost =
+      this.config.season === "summer" || this.config.season === "monsoon" ? 1.4 : 1;
+    const count = Math.min(
+      18,
+      Math.round((4 + this.config.trees.length / 6) * boost)
+    );
+
     for (let i = 0; i < count; i++) {
-      this.wildlife.push({
-        x: rng.float(40, this.config.worldWidth - 40),
-        y: rng.float(this.config.worldHeight * 0.2, this.config.worldHeight - 40),
-        vx: rng.float(-0.4, 0.4),
-        type: rng.chance(0.6) ? "bird" : "bunny",
+      this.butterflies.push({
+        x: rng.float(50, this.config.worldWidth - 50),
+        y: rng.float(this.config.worldHeight * 0.15, this.config.worldHeight * 0.85),
+        vx: rng.float(-0.55, 0.55),
+        vy: rng.float(-0.35, 0.35),
+        color: rng.pick(palette),
+        phase: rng.float(0, Math.PI * 2),
       });
     }
   }
@@ -556,6 +687,8 @@ export class ForestApp {
       this.dragLast = { x: e.clientX, y: e.clientY };
       this.decorDrag = null;
       this.panCandidate = false;
+      this.treeDragId = null;
+      this.treeDragMoved = false;
 
       if (this.customizeMode) {
         const world = this.screenToWorld(e.clientX, e.clientY);
@@ -579,6 +712,16 @@ export class ForestApp {
           }
           return;
         }
+
+        const tree = this.hitTreeAt(world.x, world.y);
+        if (tree) {
+          this.selectDecor(null);
+          this.treeDragId = tree.id;
+          this.setTreeSignVisible(tree.id, true);
+          if (this.ready) this.app.canvas.style.cursor = "grabbing";
+          return;
+        }
+
         if (this.decorBrush) {
           this.placeDecorAt(world.x, world.y);
           return;
@@ -597,15 +740,32 @@ export class ForestApp {
         this.persistPlacements();
         this.treeLayer.sortChildren();
       }
+      if (this.treeDragId != null) {
+        if (this.treeDragMoved) this.persistTreePositions();
+        if (this.customizeMode && this.ready) {
+          this.app.canvas.style.cursor = this.decorBrush ? "crosshair" : "default";
+        }
+      }
       this.dragging = false;
       this.decorDrag = null;
       this.panCandidate = false;
+      this.treeDragId = null;
+      this.treeDragMoved = false;
     };
 
     const onPointerMove = (e: PointerEvent) => {
       const dx = e.clientX - this.dragLast.x;
       const dy = e.clientY - this.dragLast.y;
       const world = this.screenToWorld(e.clientX, e.clientY);
+
+      if (this.treeDragId != null) {
+        if (Math.hypot(dx, dy) > 2 || this.treeDragMoved) {
+          this.treeDragMoved = true;
+          this.setTreeWorldPosition(this.treeDragId, world.x, world.y);
+        }
+        this.dragLast = { x: e.clientX, y: e.clientY };
+        return;
+      }
 
       if (this.decorDrag && this.selectedDecor) {
         const decor = this.selectedDecor;
@@ -627,6 +787,11 @@ export class ForestApp {
       }
 
       if (!this.dragging && !this.panCandidate) return;
+      // No pan when the whole forest already fits (unless zoomed in)
+      if (this.worldFitsInView()) {
+        this.dragLast = { x: e.clientX, y: e.clientY };
+        return;
+      }
       this.dragLast = { x: e.clientX, y: e.clientY };
       this.camera.x -= dx / this.camera.zoom;
       this.camera.y -= dy / this.camera.zoom;
@@ -642,7 +807,18 @@ export class ForestApp {
       if (w !== lastW || h !== lastH) {
         lastW = w;
         lastH = h;
-        this.applyCamera();
+        if (this.matchWorldToViewport()) {
+          this.rebuildGroundOnly();
+          // Keep the forest filling the screen after a window resize
+          if (this.worldFitsInView() || this.camera.zoom <= this.containZoom() * 1.02) {
+            this.camera.zoom = this.fitZoom();
+            this.centerCamera();
+          } else {
+            this.applyCamera();
+          }
+        } else {
+          this.applyCamera();
+        }
       }
     };
     this.app.ticker.add(onResizeTick);
@@ -680,16 +856,18 @@ export class ForestApp {
     this.dayPhase = (this.dayPhase + deltaMS * 0.000008) % 1;
 
     const speed = 3.2 / this.camera.zoom;
-    if (this.keys.has("w") || this.keys.has("arrowup")) this.camera.y -= speed;
-    if (this.keys.has("s") || this.keys.has("arrowdown")) this.camera.y += speed;
-    if (this.keys.has("a") || this.keys.has("arrowleft")) this.camera.x -= speed;
-    if (this.keys.has("d") || this.keys.has("arrowright")) this.camera.x += speed;
+    if (!this.worldFitsInView()) {
+      if (this.keys.has("w") || this.keys.has("arrowup")) this.camera.y -= speed;
+      if (this.keys.has("s") || this.keys.has("arrowdown")) this.camera.y += speed;
+      if (this.keys.has("a") || this.keys.has("arrowleft")) this.camera.x -= speed;
+      if (this.keys.has("d") || this.keys.has("arrowright")) this.camera.x += speed;
+    }
     this.applyCamera();
 
     this.updateFx();
     this.updateWeather();
     this.updateDayNight();
-    this.updateWildlife(deltaMS);
+    this.updateButterflies(deltaMS);
   }
 
   private updateFx(): void {
@@ -804,27 +982,36 @@ export class ForestApp {
     if (anyLit) this.lightLayer.addChild(bloom);
   }
 
-  private updateWildlife(deltaMS: number): void {
+  private updateButterflies(deltaMS: number): void {
+    if (this.butterflies.length === 0) return;
+    const night = dayNightFactor(this.dayPhase);
+    if (night > 0.55) return;
+
     const g = new Graphics();
     g.eventMode = "none";
-    for (const w of this.wildlife) {
-      w.x += w.vx * (deltaMS / 16);
-      if (w.x < 20 || w.x > this.config.worldWidth - 20) w.vx *= -1;
-      if (w.type === "bird") {
-        const flap = Math.sin(this.time * 0.02 + w.x) * 3;
-        g.ellipse(w.x, w.y + flap, 5, 2);
-        g.fill(0x374151);
-        g.moveTo(w.x - 6, w.y + flap);
-        g.lineTo(w.x, w.y + flap - 4);
-        g.lineTo(w.x + 6, w.y + flap);
-        g.stroke({ width: 1.5, color: 0x374151 });
-      } else {
-        g.ellipse(w.x, w.y, 6, 4);
-        g.fill(0xe8dcc8);
-        g.circle(w.x + 5, w.y - 3, 3);
-        g.fill(0xe8dcc8);
-      }
+    const dt = deltaMS / 16;
+
+    for (const b of this.butterflies) {
+      b.phase += dt * 0.35;
+      b.x += (b.vx + Math.sin(b.phase * 1.7) * 0.25) * dt;
+      b.y += (b.vy + Math.cos(b.phase * 2.1) * 0.3) * dt;
+
+      if (b.x < 30 || b.x > this.config.worldWidth - 30) b.vx *= -1;
+      if (b.y < 40 || b.y > this.config.worldHeight - 30) b.vy *= -1;
+      b.x = clamp(b.x, 30, this.config.worldWidth - 30);
+      b.y = clamp(b.y, 40, this.config.worldHeight - 30);
+
+      const flap = 0.4 + Math.abs(Math.sin(this.time * 0.028 + b.phase)) * 0.6;
+      const wingW = 5 * flap;
+      const wingH = 3.4;
+      g.ellipse(b.x - wingW * 0.55, b.y, wingW, wingH);
+      g.fill({ color: b.color, alpha: 0.95 });
+      g.ellipse(b.x + wingW * 0.55, b.y, wingW, wingH);
+      g.fill({ color: b.color, alpha: 0.95 });
+      g.ellipse(b.x, b.y, 1.1, 2.2);
+      g.fill(0x2c1810);
     }
+
     this.fxLayer.addChild(g);
   }
 
