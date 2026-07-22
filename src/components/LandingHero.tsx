@@ -31,7 +31,7 @@ export function LandingHero() {
           <h1 className="brand-title font-display">Git Forest</h1>
           <p className="landing-lede">
             Every repository becomes a tree. Enter a GitHub username and wander a
-            world grown from their public code.
+            world grown from their public code. Trees quiet for a year grow fruit.
           </p>
 
           <form onSubmit={onSubmit} className="landing-form">

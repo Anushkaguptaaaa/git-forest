@@ -355,16 +355,34 @@ body {
 .explorer-hint {
   pointer-events: none;
   position: absolute;
-  bottom: 1rem;
-  left: 1rem;
+  bottom: 1.25rem;
+  left: 50%;
   z-index: 30;
   display: none;
-  border: 2px solid #3d2914;
-  background: #f3e6c8;
-  padding: 0.35rem 0.5rem;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(36rem, calc(100vw - 2rem));
+  text-align: center;
+  border: 3px solid #3d2914;
+  background: rgba(243, 230, 200, 0.94);
+  box-shadow: 3px 3px 0 #1a1208;
+  padding: 0.45rem 0.85rem;
   font-size: 8px;
   letter-spacing: 0.04em;
   color: #4a3728;
+}
+
+.explorer-hint-lore {
+  color: #5c3d14;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 9px;
+}
+
+.explorer-hint-controls {
+  margin-top: 0.3rem;
+  color: #7a6548;
+  letter-spacing: 0.05em;
 }
 
 @media (min-width: 640px) {

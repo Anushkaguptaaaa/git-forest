@@ -100,7 +100,12 @@ export function ForestExplorer({ data }: ForestExplorerProps) {
       </header>
 
       <div className="explorer-hint font-pixel">
-        Scroll zoom · drag to pan when zoomed in · Customize to move trees & decorate
+        <p className="explorer-hint-lore">
+          Trees quiet for a year grow fruit · two years, fruit falls
+        </p>
+        <p className="explorer-hint-controls">
+          Scroll zoom · drag to pan · Customize to rearrange
+        </p>
       </div>
 
       <RepoPopup />

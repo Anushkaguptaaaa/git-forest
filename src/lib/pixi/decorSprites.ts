@@ -139,25 +139,30 @@ export function scatterForestProps(
   const mushTex = tex(MUSH_URL);
   const lamps: ForestLamp[] = [];
 
-  const tooClose = (x: number, y: number, minDist: number) =>
-    treePoints.some((t) => {
+  const tooClose = (x: number, y: number, points: { x: number; y: number }[], minDist: number) =>
+    points.some((t) => {
       const dx = t.x - x;
       const dy = t.y - y;
       return dx * dx + dy * dy < minDist * minDist;
     });
 
   const lampCount = Math.min(8, 3 + Math.floor(worldWidth / 400));
+  const lampPositions: { x: number; y: number }[] = [];
   let placedLamps = 0;
   let attempts = 0;
-  while (placedLamps < lampCount && attempts < 80) {
+  // Tall sprites need generous spacing so posts don’t look stacked
+  const lampMinDist = 170;
+  while (placedLamps < lampCount && attempts < 160) {
     attempts++;
     const x = rng.float(60, worldWidth - 60);
     const y = rng.float(horizon + 80, worldHeight - 40);
-    if (tooClose(x, y, 70)) continue;
+    if (tooClose(x, y, treePoints, 70)) continue;
+    if (tooClose(x, y, lampPositions, lampMinDist)) continue;
 
     const lamp = new ForestLamp(lampTex, x, y, rng.float(56, 78));
     layer.addChild(lamp.root);
     treePoints.push({ x, y });
+    lampPositions.push({ x, y });
     lamps.push(lamp);
     placedLamps++;
   }
@@ -169,7 +174,8 @@ export function scatterForestProps(
     attempts++;
     const x = rng.float(40, worldWidth - 40);
     const y = rng.float(horizon + 50, worldHeight - 30);
-    if (tooClose(x, y, 36)) continue;
+    if (tooClose(x, y, treePoints, 36)) continue;
+    if (tooClose(x, y, lampPositions, 50)) continue;
 
     const s = new Sprite(mushTex);
     s.anchor.set(0.5, 1);
