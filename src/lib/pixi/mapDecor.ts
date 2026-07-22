@@ -117,8 +117,8 @@ function drawHorizontalTrail(worldWidth: number, worldHeight: number, rng: Rng):
     const p = center[i]!;
     const a = center[i - 1]!;
     const b = center[i + 1]!;
-    let tx = b.x - a.x;
-    let ty = b.y - a.y;
+    const tx = b.x - a.x;
+    const ty = b.y - a.y;
     const len = Math.hypot(tx, ty) || 1;
     const nx = -ty / len;
     const ny = tx / len;

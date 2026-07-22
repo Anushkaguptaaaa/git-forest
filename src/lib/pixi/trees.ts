@@ -431,7 +431,7 @@ export function drawTree(tree: TreeTraits, season: Season): Container {
   }
 
   root.addChild(g);
-  const sign = attachRepoSign(root, tree, h);
+  const sign = attachRepoSign(root, tree);
   (root as Container & { repoSign?: Container }).repoSign = sign;
 
   const hitR = tree.form === "legendary" ? canopyR + 20 : canopyR + 12;

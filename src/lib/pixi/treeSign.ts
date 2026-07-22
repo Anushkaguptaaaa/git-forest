@@ -28,7 +28,7 @@ const WOOD = {
  * Pixel wooden sign on a stake — planted in the ground in front of the tree.
  * Post is drawn continuously into the board so they stay attached.
  */
-export function attachRepoSign(root: Container, tree: TreeTraits, _treeH: number): Container {
+export function attachRepoSign(root: Container, tree: TreeTraits): Container {
   const name = shortName(tree.name);
   const len = Math.max(3, name.length);
 
