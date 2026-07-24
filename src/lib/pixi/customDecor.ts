@@ -1,4 +1,6 @@
 import { Assets, Container, Graphics, Sprite, Texture } from "pixi.js";
+import angelStatueUrl from "@/assets/angel-statue.png";
+import blueGnomeUrl from "@/assets/blue_gnome.png";
 import cherryBlossomUrl from "@/assets/cherry-blossom.png";
 import dandelionUrl from "@/assets/dandelion.png";
 import flowersUrl from "@/assets/flowers.png";
@@ -10,13 +12,18 @@ import mushUrl from "@/assets/mush.png";
 import pinkFlowersUrl from "@/assets/pink-flowers.png";
 import pixelLavenderUrl from "@/assets/pixel-lavender.png";
 import purpleFlowersUrl from "@/assets/purple-flowers.png";
+import rainbowGnomeUrl from "@/assets/rainbow_gnome.png";
+import redGnomeUrl from "@/assets/red_gnome.png";
 import stoneUrl from "@/assets/stone.png";
+import stonehengeUrl from "@/assets/stonehenge.png";
 
 function assetSrc(mod: string | { src: string }): string {
   return typeof mod === "string" ? mod : mod.src;
 }
 
 export type DecorKind =
+  | "angel-statue"
+  | "blue-gnome"
   | "cherry-blossom"
   | "dandelion"
   | "flowers"
@@ -28,7 +35,10 @@ export type DecorKind =
   | "pink-flowers"
   | "pixel-lavender"
   | "purple-flowers"
-  | "stone";
+  | "rainbow-gnome"
+  | "red-gnome"
+  | "stone"
+  | "stonehenge";
 
 export interface DecorCatalogItem {
   id: DecorKind;
@@ -40,6 +50,22 @@ export interface DecorCatalogItem {
 }
 
 export const DECOR_CATALOG: DecorCatalogItem[] = [
+  {
+    id: "angel-statue",
+    label: "Angel statue",
+    defaultH: 72,
+    minH: 32,
+    maxH: 240,
+    url: assetSrc(angelStatueUrl as string | { src: string }),
+  },
+  {
+    id: "blue-gnome",
+    label: "Blue gnome",
+    defaultH: 40,
+    minH: 18,
+    maxH: 160,
+    url: assetSrc(blueGnomeUrl as string | { src: string }),
+  },
   {
     id: "cherry-blossom",
     label: "Cherry blossom",
@@ -129,12 +155,36 @@ export const DECOR_CATALOG: DecorCatalogItem[] = [
     url: assetSrc(purpleFlowersUrl as string | { src: string }),
   },
   {
+    id: "rainbow-gnome",
+    label: "Rainbow gnome",
+    defaultH: 40,
+    minH: 18,
+    maxH: 160,
+    url: assetSrc(rainbowGnomeUrl as string | { src: string }),
+  },
+  {
+    id: "red-gnome",
+    label: "Red gnome",
+    defaultH: 40,
+    minH: 18,
+    maxH: 160,
+    url: assetSrc(redGnomeUrl as string | { src: string }),
+  },
+  {
     id: "stone",
     label: "Stone",
     defaultH: 36,
     minH: 16,
     maxH: 160,
     url: assetSrc(stoneUrl as string | { src: string }),
+  },
+  {
+    id: "stonehenge",
+    label: "Stonehenge",
+    defaultH: 64,
+    minH: 28,
+    maxH: 220,
+    url: assetSrc(stonehengeUrl as string | { src: string }),
   },
 ];
 
@@ -249,13 +299,31 @@ export class PlacedDecor {
     return Math.abs(this.sprite.height);
   }
 
+  /** False after the display object was torn down in a meadow rebuild. */
+  isAlive(): boolean {
+    try {
+      return (
+        this.root != null &&
+        !this.root.destroyed &&
+        this.gizmos != null &&
+        !this.gizmos.destroyed &&
+        this.sprite != null &&
+        !this.sprite.destroyed
+      );
+    } catch {
+      return false;
+    }
+  }
+
   setPosition(x: number, y: number): void {
+    if (!this.isAlive()) return;
     this.root.x = x;
     this.root.y = y;
     this.root.zIndex = y;
   }
 
   setHeight(h: number): void {
+    if (!this.isAlive()) return;
     const item = getDecorItem(this.kind);
     this.heightPx = Math.max(item.minH, Math.min(item.maxH, h));
     this.applyHeight(this.heightPx);
@@ -263,6 +331,7 @@ export class PlacedDecor {
   }
 
   setRotation(rad: number): void {
+    if (!this.isAlive()) return;
     this.rotationRad = rad;
     this.root.rotation = rad;
   }
@@ -274,6 +343,7 @@ export class PlacedDecor {
 
   /** World → local (unrotated) coords relative to decor center. */
   worldToLocal(worldX: number, worldY: number): { x: number; y: number } {
+    if (!this.isAlive()) return { x: 0, y: 0 };
     const dx = worldX - this.root.x;
     const dy = worldY - this.root.y;
     const c = Math.cos(-this.rotationRad);
@@ -282,6 +352,7 @@ export class PlacedDecor {
   }
 
   hitTest(worldX: number, worldY: number): DecorHit | null {
+    if (!this.isAlive()) return null;
     const local = this.worldToLocal(worldX, worldY);
     const hw = this.boxW / 2;
     const hh = this.boxH / 2;
@@ -312,20 +383,30 @@ export class PlacedDecor {
     return {
       id: this.id,
       kind: this.kind,
-      x: this.root.x,
-      y: this.root.y,
+      x: this.isAlive() ? this.root.x : 0,
+      y: this.isAlive() ? this.root.y : 0,
       height: this.heightPx,
       rotation: this.rotationRad,
     };
   }
 
   private applyHeight(h: number): void {
+    if (!this.isAlive()) return;
     const scale = h / this.sprite.texture.height;
     this.sprite.scale.set(scale);
   }
 
   private redrawGizmos(): void {
-    this.gizmos.clear();
+    if (!this.isAlive()) {
+      this.selected = false;
+      return;
+    }
+    try {
+      this.gizmos.clear();
+    } catch {
+      this.selected = false;
+      return;
+    }
     if (!this.selected) return;
 
     const hw = this.boxW / 2;

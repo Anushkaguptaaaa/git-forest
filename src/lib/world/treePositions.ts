@@ -48,14 +48,26 @@ export function saveTreePositions(
 /** Overlay saved x/y onto freshly placed trees (unknown ids keep layout positions). */
 export function applySavedTreePositions(
   username: string,
-  trees: TreeTraits[]
+  trees: TreeTraits[],
+  worldWidth?: number,
+  worldHeight?: number
 ): TreeTraits[] {
   const saved = loadTreePositions(username);
   if (saved.size === 0) return trees;
+  const margin = 90;
+  const maxX = worldWidth != null ? Math.max(margin, worldWidth - margin) : null;
+  const maxY = worldHeight != null ? Math.max(margin, worldHeight - margin) : null;
   return trees
     .map((t) => {
       const p = saved.get(t.id);
-      return p ? { ...t, x: p.x, y: p.y } : t;
+      if (!p) return t;
+      let x = p.x;
+      let y = p.y;
+      if (maxX != null && maxY != null) {
+        x = Math.min(maxX, Math.max(margin, x));
+        y = Math.min(maxY, Math.max(margin, y));
+      }
+      return { ...t, x, y };
     })
     .sort((a, b) => a.y - b.y);
 }

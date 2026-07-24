@@ -4,6 +4,14 @@ import { SEASON_PALETTE } from "@/lib/world/seasons";
 import { createRng } from "@/lib/world/rng";
 import { saveTreePositions } from "@/lib/world/treePositions";
 import {
+  loadLayoutSpread,
+  loadZoomRatio,
+  saveLayoutSpread,
+  saveZoomRatio,
+  MAX_SPREAD,
+  MIN_SPREAD,
+} from "@/lib/world/viewState";
+import {
   DECOR_CATALOG,
   PlacedDecor,
   getDecorItem,
@@ -23,6 +31,7 @@ export type TreeSelectHandler = (tree: TreeTraits | null) => void;
 export type DecorSelectHandler = (
   info: { id: string; kind: DecorKind; scale: number } | null
 ) => void;
+export type SpreadChangeHandler = (spread: number) => void;
 
 export class ForestApp {
   private app: Application;
@@ -37,6 +46,7 @@ export class ForestApp {
   private config: WorldConfig;
   private onSelect: TreeSelectHandler;
   private onDecorSelect: DecorSelectHandler | null = null;
+  private onSpreadChange: SpreadChangeHandler | null = null;
   private keys = new Set<string>();
   private camera = { x: 0, y: 0, zoom: 1 };
   private dragging = false;
@@ -46,6 +56,12 @@ export class ForestApp {
   private destroyed = false;
   private ready = false;
   private initPromise: Promise<void> | null = null;
+  /** Meadow size + tree layout before user spread-zoom (grassy expand). */
+  private baseWorldW = 0;
+  private baseWorldH = 0;
+  private baseTreePos = new Map<number, { x: number; y: number }>();
+  /** 1 = default density; higher = bigger grassy meadow with trees spread out. */
+  private layoutSpread = MIN_SPREAD;
   private particles: { x: number; y: number; vx: number; vy: number; life: number }[] = [];
   private butterflies: {
     x: number;
@@ -104,6 +120,10 @@ export class ForestApp {
     this.onDecorSelect = handler;
   }
 
+  setSpreadChangeHandler(handler: SpreadChangeHandler | null): void {
+    this.onSpreadChange = handler;
+  }
+
   setCustomizeMode(on: boolean): void {
     this.customizeMode = on;
     if (!on) {
@@ -123,6 +143,21 @@ export class ForestApp {
     this.selectTreeNode(null);
   }
 
+  getLayoutSpread(): number {
+    return this.layoutSpread;
+  }
+
+  /** UI scale bar — expands grassy meadow and spreads trees (persists across seasons). */
+  setLayoutSpreadFromUi(spread: number): void {
+    if (!this.ready || this.destroyed || this.baseWorldW <= 0) return;
+    const next = clamp(spread, MIN_SPREAD, MAX_SPREAD);
+    if (Math.abs(next - this.layoutSpread) < 0.001) return;
+    // Keep customize moves — remap from current layout, not the original spawn
+    this.syncBaseFromCurrentTrees();
+    this.applyLayoutSpread(next);
+    this.rebuildAfterSpread();
+  }
+
   setDecorBrush(kind: DecorKind | null): void {
     this.decorBrush = kind;
     if (kind) this.selectDecor(null);
@@ -131,7 +166,7 @@ export class ForestApp {
     }
   }
 
-  /** Rebuild seasonal visuals in place (keeps camera + custom decor). */
+  /** Rebuild seasonal visuals in place (keeps camera, world size, and tree layout). */
   setSeason(season: Season, weather: Weather): void {
     if (!this.ready || this.destroyed) return;
     if (this.config.season === season && this.config.weather === weather) return;
@@ -140,7 +175,9 @@ export class ForestApp {
     this.app.renderer.background.color = SEASON_PALETTE[season].grass;
 
     this.persistPlacements();
-    this.selectDecor(null);
+    this.selectedDecor = null;
+    this.onDecorSelect?.(null);
+    this.decorDrag = null;
     this.selectTreeNode(null);
 
     this.clearLayer(this.groundLayer);
@@ -151,12 +188,22 @@ export class ForestApp {
     this.lamps = [];
     this.particles = [];
 
-    this.matchWorldToViewport();
+    // Do NOT rematch/resize the world here — keep spread + camera across seasons
     this.buildGround();
     this.buildTrees();
     this.scatterMapProps();
     this.restoreCustomDecor();
     this.seedButterflies();
+    // Restore the same overview/zoom level the user had
+    const ratio = loadZoomRatio(this.config.username);
+    if (ratio != null) {
+      this.camera.zoom = clamp(
+        ratio * this.containZoom(),
+        this.minZoom(),
+        this.maxZoom()
+      );
+    }
+    this.applyCamera();
   }
 
   setSelectedDecorScale(scale: number): void {
@@ -244,6 +291,12 @@ export class ForestApp {
 
     // Expand meadow to the viewport aspect so contain-zoom fills the screen (no green bars)
     this.matchWorldToViewport();
+    this.captureBaseLayout();
+    this.layoutSpread = loadLayoutSpread(this.config.username);
+    if (this.layoutSpread > MIN_SPREAD + 0.001) {
+      this.applyLayoutSpread(this.layoutSpread);
+    }
+
     this.buildGround();
     this.buildTrees();
     this.restoreCustomDecor();
@@ -258,7 +311,19 @@ export class ForestApp {
     }
 
     this.seedButterflies();
+    // Prefer a full-grove view so every tree is on screen.
+    // Only restore a mild saved zoom-in — old close-up ratios hid half the forest.
     this.camera.zoom = this.fitZoom();
+    const savedRatio = loadZoomRatio(this.config.username);
+    if (savedRatio != null && savedRatio <= 1.2) {
+      this.camera.zoom = clamp(
+        savedRatio * this.containZoom(),
+        this.minZoom(),
+        this.maxZoom()
+      );
+    } else if (savedRatio != null && savedRatio > 1.2) {
+      saveZoomRatio(this.config.username, 1);
+    }
     this.centerCamera();
     this.bindInput();
     this.bindStageSelection();
@@ -345,10 +410,19 @@ export class ForestApp {
   }
 
   private selectDecor(decor: PlacedDecor | null): void {
-    if (this.selectedDecor) this.selectedDecor.setSelected(false);
-    this.selectedDecor = decor;
-    if (decor) {
-      decor.setSelected(true);
+    const prev = this.selectedDecor;
+    // Drop the reference first so rebuild/click handlers never touch a dead decor
+    this.selectedDecor = decor && decor.isAlive() ? decor : null;
+
+    if (prev && prev !== this.selectedDecor) {
+      try {
+        if (prev.isAlive()) prev.setSelected(false);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (this.selectedDecor) {
+      this.selectedDecor.setSelected(true);
       this.decorBrush = null;
       if (this.ready) this.app.canvas.style.cursor = "default";
     }
@@ -356,7 +430,8 @@ export class ForestApp {
   }
 
   private emitDecorSelect(): void {
-    if (!this.selectedDecor) {
+    if (!this.selectedDecor || !this.selectedDecor.isAlive()) {
+      this.selectedDecor = null;
       this.onDecorSelect?.(null);
       return;
     }
@@ -368,7 +443,9 @@ export class ForestApp {
   }
 
   private persistPlacements(): void {
-    const items = [...this.placements.values()].map((d) => d.toData());
+    const items = [...this.placements.values()]
+      .filter((d) => d.isAlive())
+      .map((d) => d.toData());
     savePlacementsToStorage(this.config.username, items);
   }
 
@@ -383,11 +460,16 @@ export class ForestApp {
   }
 
   private hitDecorAt(worldX: number, worldY: number): { decor: PlacedDecor; hit: DecorHit } | null {
+    if (this.selectedDecor && !this.selectedDecor.isAlive()) {
+      this.selectedDecor = null;
+    }
     if (this.selectedDecor) {
       const hit = this.selectedDecor.hitTest(worldX, worldY);
       if (hit) return { decor: this.selectedDecor, hit };
     }
-    const list = [...this.placements.values()].sort((a, b) => b.y - a.y);
+    const list = [...this.placements.values()]
+      .filter((d) => d.isAlive())
+      .sort((a, b) => b.y - a.y);
     for (const decor of list) {
       if (decor === this.selectedDecor) continue;
       const hit = decor.hitTest(worldX, worldY);
@@ -397,7 +479,7 @@ export class ForestApp {
   }
 
   private minZoom(): number {
-    // Full-meadow fit — never shrink the forest into a corner with empty green
+    // Full-meadow fit — grass always edge-to-edge (spread expands the meadow instead)
     return this.containZoom();
   }
 
@@ -409,21 +491,115 @@ export class ForestApp {
     const w = this.app.screen.width;
     const h = this.app.screen.height;
     if (w <= 0 || h <= 0) return 1;
-    // Exact fit — world aspect is matched to the viewport so this fills edge-to-edge
     return Math.min(w / this.config.worldWidth, h / this.config.worldHeight);
   }
 
   private fitZoom(): number {
-    const contain = this.containZoom();
-    const n = this.config.trees.length;
-    // Dense forests: start at full overview (still fills the screen)
-    if (n >= 35) {
-      return contain;
+    // Full-meadow fit — Scale bar changes meadow size instead of camera zoom
+    return this.containZoom();
+  }
+
+  private captureBaseLayout(): void {
+    this.baseWorldW = this.config.worldWidth;
+    this.baseWorldH = this.config.worldHeight;
+    this.baseTreePos.clear();
+    for (const t of this.config.trees) {
+      this.baseTreePos.set(t.id, { x: t.x, y: t.y });
     }
-    // Small forests: fill the screen, or sit a bit closer if the meadow is tiny
-    const comfortable = Math.min(1.05, this.maxZoom());
-    if (contain >= comfortable * 0.92) return contain;
-    return comfortable;
+  }
+
+  /**
+   * Fold current (possibly spread + customized) positions back into the
+   * spread=1 base map so the next scale change keeps rearrange moves.
+   */
+  private syncBaseFromCurrentTrees(): void {
+    if (this.baseWorldW <= 0 || this.baseWorldH <= 0) return;
+    const margin = 90;
+    const baseSpanX = Math.max(1, this.baseWorldW - margin * 2);
+    const baseSpanY = Math.max(1, this.baseWorldH - margin * 2);
+    const spanX = Math.max(1, this.config.worldWidth - margin * 2);
+    const spanY = Math.max(1, this.config.worldHeight - margin * 2);
+
+    for (const t of this.config.trees) {
+      const nx = clamp((t.x - margin) / spanX, 0, 1);
+      const ny = clamp((t.y - margin) / spanY, 0, 1);
+      this.baseTreePos.set(t.id, {
+        x: margin + nx * baseSpanX,
+        y: margin + ny * baseSpanY,
+      });
+    }
+  }
+
+  /**
+   * Expand/shrink the grassy meadow from the captured base layout.
+   * Trees spread with it so zooming out never shows empty non-grass bars.
+   */
+  private applyLayoutSpread(spread: number): void {
+    if (this.baseWorldW <= 0 || this.baseWorldH <= 0) return;
+    this.layoutSpread = clamp(spread, MIN_SPREAD, MAX_SPREAD);
+
+    const margin = 90;
+    const sw = this.app.screen.width;
+    const sh = this.app.screen.height;
+    const aspect = sw > 0 && sh > 0 ? sw / sh : this.baseWorldW / this.baseWorldH;
+
+    let ww = Math.round(
+      margin * 2 + (this.baseWorldW - margin * 2) * this.layoutSpread
+    );
+    let wh = Math.round(
+      margin * 2 + (this.baseWorldH - margin * 2) * this.layoutSpread
+    );
+
+    if (ww / wh < aspect) ww = Math.round(wh * aspect);
+    else wh = Math.round(ww / aspect);
+
+    const baseSpanX = Math.max(1, this.baseWorldW - margin * 2);
+    const baseSpanY = Math.max(1, this.baseWorldH - margin * 2);
+    const spanX = Math.max(1, ww - margin * 2);
+    const spanY = Math.max(1, wh - margin * 2);
+
+    const trees = this.config.trees
+      .map((t) => {
+        const base = this.baseTreePos.get(t.id) ?? { x: t.x, y: t.y };
+        const nx = clamp((base.x - margin) / baseSpanX, 0, 1);
+        const ny = clamp((base.y - margin) / baseSpanY, 0, 1);
+        return {
+          ...t,
+          x: margin + nx * spanX,
+          y: margin + ny * spanY,
+        };
+      })
+      .sort((a, b) => a.y - b.y);
+
+    this.config = { ...this.config, worldWidth: ww, worldHeight: wh, trees };
+  }
+
+  private rebuildAfterSpread(): void {
+    // Drop selection without touching display objects — they are about to be destroyed
+    this.selectedDecor = null;
+    this.onDecorSelect?.(null);
+    this.decorDrag = null;
+    this.clearLayer(this.groundLayer);
+    this.destroyLayerChildren(this.treeLayer);
+    this.destroyLayerChildren(this.signLayer);
+    this.placements.clear();
+    this.lamps = [];
+    this.buildGround();
+    this.buildTrees();
+    this.scatterMapProps();
+    this.restoreCustomDecor();
+    this.camera.zoom = this.containZoom();
+    this.centerCamera();
+    this.persistViewState();
+    this.onSpreadChange?.(this.layoutSpread);
+  }
+
+  private persistViewState(): void {
+    saveLayoutSpread(this.config.username, this.layoutSpread);
+    const contain = this.containZoom();
+    if (contain > 0) {
+      saveZoomRatio(this.config.username, this.camera.zoom / contain);
+    }
   }
 
   private centerCamera(): void {
@@ -446,10 +622,10 @@ export class ForestApp {
 
   /**
    * Grow worldWidth/Height so the meadow aspect matches the screen.
-   * When remapTrees is true (initial build), stretch positions so the grove
-   * fills the new bounds instead of leaving an empty wing.
+   * Always stretch tree positions when the meadow grows so the grove stays
+   * filled — growing without remap left a tiny forest in a huge empty field.
    */
-  private matchWorldToViewport(remapTrees = true): boolean {
+  private matchWorldToViewport(): boolean {
     const sw = this.app.screen.width;
     const sh = this.app.screen.height;
     if (sw <= 0 || sh <= 0) return false;
@@ -483,17 +659,17 @@ export class ForestApp {
     const oldSpanY = Math.max(1, oldH - margin * 2);
     const scaleX = (ww - margin * 2) / oldSpanX;
     const scaleY = (wh - margin * 2) / oldSpanY;
-    const shouldRemap = remapTrees && (scaleX > 1.04 || scaleY > 1.04);
 
-    const trees = shouldRemap
-      ? this.config.trees
-          .map((t) => ({
-            ...t,
-            x: margin + (t.x - margin) * scaleX,
-            y: margin + (t.y - margin) * scaleY,
-          }))
-          .sort((a, b) => a.y - b.y)
-      : this.config.trees;
+    const trees =
+      scaleX > 1.001 || scaleY > 1.001
+        ? this.config.trees
+            .map((t) => ({
+              ...t,
+              x: margin + (t.x - margin) * scaleX,
+              y: margin + (t.y - margin) * scaleY,
+            }))
+            .sort((a, b) => a.y - b.y)
+        : this.config.trees;
 
     this.config = { ...this.config, worldWidth: ww, worldHeight: wh, trees };
     return true;
@@ -628,7 +804,13 @@ export class ForestApp {
   }
 
   private persistTreePositions(): void {
-    saveTreePositions(this.config.username, this.config.trees);
+    this.syncBaseFromCurrentTrees();
+    // Persist base-space coords so reload + scale keeps customize moves
+    const payload = this.config.trees.map((t) => {
+      const b = this.baseTreePos.get(t.id);
+      return { id: t.id, x: b?.x ?? t.x, y: b?.y ?? t.y };
+    });
+    saveTreePositions(this.config.username, payload);
   }
 
   private seedButterflies(): void {
@@ -659,7 +841,8 @@ export class ForestApp {
   private applyCamera(): void {
     const w = this.app.screen.width;
     const h = this.app.screen.height;
-    this.camera.zoom = clamp(this.camera.zoom, this.minZoom(), this.maxZoom());
+    // Camera zoom is locked to a full-meadow fit; Scale bar changes meadow size instead
+    this.camera.zoom = this.containZoom();
     const viewW = w / this.camera.zoom;
     const viewH = h / this.camera.zoom;
     // If the view is larger than the meadow, center it — don't pin to (0,0)
@@ -682,8 +865,6 @@ export class ForestApp {
 
     const onKeyDown = (e: KeyboardEvent) => {
       this.keys.add(e.key.toLowerCase());
-      if (e.key === "=" || e.key === "+") this.zoomBy(0.1);
-      if (e.key === "-" || e.key === "_") this.zoomBy(-0.1);
       // Tilt selected prop in small steps
       if (this.customizeMode && this.selectedDecor) {
         if (e.key === "[" || e.key === "ArrowLeft" && e.altKey) {
@@ -712,8 +893,8 @@ export class ForestApp {
     window.addEventListener("keyup", onKeyUp);
 
     const onWheel = (e: WheelEvent) => {
+      // Scale is only via the Scale bar — block scroll-zoom on the meadow
       e.preventDefault();
-      this.zoomBy(e.deltaY > 0 ? -0.08 : 0.08);
     };
     canvas.addEventListener("wheel", onWheel, { passive: false });
 
@@ -838,18 +1019,53 @@ export class ForestApp {
       if (this.destroyed) return;
       const w = this.app.screen.width;
       const h = this.app.screen.height;
-      if (w !== lastW || h !== lastH) {
+        if (w !== lastW || h !== lastH) {
         lastW = w;
         lastH = h;
-        if (this.matchWorldToViewport(false)) {
-          this.rebuildGroundOnly();
-          // Keep the forest filling the screen after a window resize
+        // Re-apply spread from the fixed base so grass stays filled on resize
+        if (this.baseWorldW > 0) {
+          const ratio = this.camera.zoom / Math.max(1e-6, this.containZoom());
+          this.syncBaseFromCurrentTrees();
+          this.applyLayoutSpread(this.layoutSpread);
+          this.selectedDecor = null;
+          this.onDecorSelect?.(null);
+          this.decorDrag = null;
+          this.clearLayer(this.groundLayer);
+          this.destroyLayerChildren(this.treeLayer);
+          this.destroyLayerChildren(this.signLayer);
+          this.placements.clear();
+          this.lamps = [];
+          this.buildGround();
+          this.buildTrees();
+          this.scatterMapProps();
+          this.restoreCustomDecor();
+          this.camera.zoom = clamp(
+            ratio * this.containZoom(),
+            this.minZoom(),
+            this.maxZoom()
+          );
           if (this.worldFitsInView() || this.camera.zoom <= this.containZoom() * 1.02) {
             this.camera.zoom = this.fitZoom();
             this.centerCamera();
           } else {
             this.applyCamera();
           }
+          this.persistViewState();
+        } else if (this.matchWorldToViewport()) {
+          this.captureBaseLayout();
+          this.selectedDecor = null;
+          this.onDecorSelect?.(null);
+          this.decorDrag = null;
+          this.rebuildGroundOnly();
+          this.destroyLayerChildren(this.treeLayer);
+          this.destroyLayerChildren(this.signLayer);
+          this.placements.clear();
+          this.lamps = [];
+          this.buildTrees();
+          this.scatterMapProps();
+          this.restoreCustomDecor();
+          this.camera.zoom = this.fitZoom();
+          this.centerCamera();
         } else {
           this.applyCamera();
         }
@@ -870,18 +1086,6 @@ export class ForestApp {
       window.removeEventListener("pointermove", onPointerMove);
       this.app.ticker.remove(onResizeTick);
     };
-  }
-
-  private zoomBy(delta: number): void {
-    const prev = this.camera.zoom;
-    this.camera.zoom = clamp(prev + delta, this.minZoom(), this.maxZoom());
-    const w = this.app.screen.width;
-    const h = this.app.screen.height;
-    const cx = this.camera.x + w / 2 / prev;
-    const cy = this.camera.y + h / 2 / prev;
-    this.camera.x = cx - w / 2 / this.camera.zoom;
-    this.camera.y = cy - h / 2 / this.camera.zoom;
-    this.applyCamera();
   }
 
   private update(deltaMS: number): void {
@@ -939,13 +1143,15 @@ export class ForestApp {
     }
 
     if (weather === "rain" || weather === "snow") {
-      const target = weather === "rain" ? 80 : 70;
+      const area = worldWidth * worldHeight;
+      const rainTarget = Math.min(220, Math.max(100, Math.floor(area / 14000)));
+      const target = weather === "rain" ? rainTarget : 70;
       while (this.particles.length < target) {
         this.particles.push({
           x: Math.random() * worldWidth,
           y: Math.random() * worldHeight,
-          vx: weather === "snow" ? (Math.random() - 0.5) * 0.35 : 0.45,
-          vy: weather === "snow" ? 0.5 + Math.random() * 0.45 : 2.8 + Math.random() * 2.2,
+          vx: weather === "snow" ? (Math.random() - 0.5) * 0.35 : 0.55,
+          vy: weather === "snow" ? 0.5 + Math.random() * 0.45 : 3.2 + Math.random() * 2.8,
           life: 1,
         });
       }
@@ -960,9 +1166,9 @@ export class ForestApp {
             p.x = Math.random() * worldWidth;
           }
           g.moveTo(p.x, p.y);
-          g.lineTo(p.x + p.vx * 1.5, p.y + 7);
+          g.lineTo(p.x + p.vx * 1.8, p.y + 9);
         }
-        g.stroke({ width: 1, color: 0xd0e4f5, alpha: 0.55 });
+        g.stroke({ width: 1.25, color: 0xd8eaf8, alpha: 0.7 });
       } else {
         for (const p of this.particles) {
           p.x += p.vx;

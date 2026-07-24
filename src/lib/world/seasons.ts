@@ -41,19 +41,17 @@ export function weatherFromSeed(rng: Rng, season: Season): Weather {
     return "clear";
   }
   if (season === "autumn") {
-    if (roll < 0.25) return "rain";
-    if (roll < 0.45) return "fog";
+    // Rain belongs to monsoon — autumn stays misty / clear
+    if (roll < 0.4) return "fog";
     if (roll < 0.7) return "cloudy";
     return "clear";
   }
   if (season === "monsoon") {
-    if (roll < 0.55) return "rain";
-    if (roll < 0.75) return "cloudy";
-    return "clear";
+    // Monsoon is defined by rain — always pour
+    return "rain";
   }
   // summer
-  if (roll < 0.15) return "rain";
-  if (roll < 0.35) return "cloudy";
+  if (roll < 0.2) return "cloudy";
   return "clear";
 }
 

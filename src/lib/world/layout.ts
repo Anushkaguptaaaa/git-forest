@@ -6,8 +6,8 @@ import { seasonFromSeed, weatherFromSeed, loadSeasonOverride } from "./seasons";
 import { applySavedTreePositions } from "./treePositions";
 
 /** Spacing between tree bases — drives how big the meadow grows */
-const SPACING = 86;
-const MIN_DIST = 58;
+const SPACING = 96;
+const MIN_DIST = 68;
 /** Default landscape meadow — matches typical viewports so aspect-stretch doesn't leave an empty wing */
 const TARGET_ASPECT = 16 / 10;
 const MARGIN = 90;
@@ -168,7 +168,12 @@ export function buildWorld(data: ForestData): WorldConfig {
 
   const { worldWidth, worldHeight } = worldSizeForCount(baseTraits.length);
   const placed = placeTrees(baseTraits, rng, worldWidth, worldHeight);
-  const trees = applySavedTreePositions(data.profile.login, placed);
+  const trees = applySavedTreePositions(
+    data.profile.login,
+    placed,
+    worldWidth,
+    worldHeight
+  );
 
   return {
     seed,

@@ -124,7 +124,7 @@ export function ForestExplorer({ data }: ForestExplorerProps) {
           Trees quiet for a year grow fruit· two years, fruit falls
         </p>
         <p className="explorer-hint-controls">
-          Scroll zoom · drag to pan · Guide for the legend · Customize to place props
+          Scale bar to widen the meadow · Guide for the legend · Customize to place props
         </p>
       </div>
 

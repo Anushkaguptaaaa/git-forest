@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { WorldConfig } from "@/lib/github/types";
 import { ForestApp } from "@/lib/pixi/ForestApp";
+import { loadLayoutSpread } from "@/lib/world/viewState";
 import { useForestStore } from "@/store/forestStore";
 import { CustomizePanel } from "./CustomizePanel";
+import { ScaleBar } from "./ScaleBar";
 
 interface ForestCanvasProps {
   world: WorldConfig;
@@ -39,6 +41,9 @@ export function ForestCanvas({ world }: ForestCanvasProps) {
   const setSelectedDecor = useForestStore((s) => s.setSelectedDecor);
   const setSelectedDecorScale = useForestStore((s) => s.setSelectedDecorScale);
 
+  const [spread, setSpread] = useState(() => loadLayoutSpread(world.username));
+  const [scaleReady, setScaleReady] = useState(false);
+
   const mountIdRef = useRef(0);
 
   // Remount only when the forest identity changes — not on season toggles
@@ -48,10 +53,16 @@ export function ForestCanvas({ world }: ForestCanvasProps) {
 
     const mountId = ++mountIdRef.current;
     let cancelled = false;
+    setScaleReady(false);
+    setSpread(loadLayoutSpread(worldRef.current.username));
     const app = new ForestApp(worldRef.current, (tree) => selectRef.current(tree));
     app.setDecorSelectHandler((info) => {
       setSelectedDecor(info);
       if (info) setSelectedDecorScale(info.scale);
+    });
+    app.setSpreadChangeHandler((next) => {
+      if (mountIdRef.current !== mountId) return;
+      setSpread(next);
     });
     appRef.current = app;
 
@@ -61,8 +72,8 @@ export function ForestCanvas({ world }: ForestCanvasProps) {
         if (cancelled || mountIdRef.current !== mountId) return;
         await app.init(host);
         if (cancelled || mountIdRef.current !== mountId) return;
-        const { season, weather } = worldRef.current;
-        app.setSeason(season, weather);
+        setSpread(app.getLayoutSpread());
+        setScaleReady(true);
       } catch (err) {
         if (!cancelled && mountIdRef.current === mountId) {
           console.error("Forest init failed", err);
@@ -102,6 +113,14 @@ export function ForestCanvas({ world }: ForestCanvasProps) {
         className="absolute inset-0 overflow-hidden bg-[#1a2e1a]"
         aria-label="Explorable Git Forest"
         data-map="meadow-v3"
+      />
+      <ScaleBar
+        value={spread}
+        disabled={!scaleReady}
+        onChange={(next) => {
+          setSpread(next);
+          appRef.current?.setLayoutSpreadFromUi(next);
+        }}
       />
       <CustomizePanel
         onDelete={() => appRef.current?.deleteSelectedDecor()}
