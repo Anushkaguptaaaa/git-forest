@@ -29,10 +29,11 @@ export function LandingHero() {
         >
           <p className="landing-eyebrow font-pixel">Public profiles · no login</p>
           <h1 className="brand-title font-display">Git Forest</h1>
-          <p className="landing-lede">
-            Every repository becomes a tree. Enter a GitHub username and wander a
-            world grown from their public code. Trees quiet for a year grow fruit.
-          </p>
+          <div className="landing-lede font-pixel">
+            <p>Every repository becomes a tree.</p>
+            <p>Enter a GitHub username and wander their public code.</p>
+            <p>Trees quiet for a year grow fruit.</p>
+          </div>
 
           <form onSubmit={onSubmit} className="landing-form">
             <label className="sr-only" htmlFor="username">

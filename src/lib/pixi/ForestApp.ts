@@ -442,16 +442,19 @@ export class ForestApp {
 
   /**
    * Grow worldWidth/Height so the meadow aspect matches the screen.
-   * Prevents letterboxed green strips when the camera fits the whole forest.
+   * When remapTrees is true (initial build), stretch positions so the grove
+   * fills the new bounds instead of leaving an empty wing.
    */
-  private matchWorldToViewport(): boolean {
+  private matchWorldToViewport(remapTrees = true): boolean {
     const sw = this.app.screen.width;
     const sh = this.app.screen.height;
     if (sw <= 0 || sh <= 0) return false;
 
     const aspect = sw / sh;
-    let ww = this.config.worldWidth;
-    let wh = this.config.worldHeight;
+    const oldW = this.config.worldWidth;
+    const oldH = this.config.worldHeight;
+    let ww = oldW;
+    let wh = oldH;
 
     // Keep room for every tree (saved positions may sit near edges)
     let needW = ww;
@@ -469,8 +472,26 @@ export class ForestApp {
       wh = Math.round(ww / aspect);
     }
 
-    if (ww === this.config.worldWidth && wh === this.config.worldHeight) return false;
-    this.config = { ...this.config, worldWidth: ww, worldHeight: wh };
+    if (ww === oldW && wh === oldH) return false;
+
+    const margin = 90;
+    const oldSpanX = Math.max(1, oldW - margin * 2);
+    const oldSpanY = Math.max(1, oldH - margin * 2);
+    const scaleX = (ww - margin * 2) / oldSpanX;
+    const scaleY = (wh - margin * 2) / oldSpanY;
+    const shouldRemap = remapTrees && (scaleX > 1.04 || scaleY > 1.04);
+
+    const trees = shouldRemap
+      ? this.config.trees
+          .map((t) => ({
+            ...t,
+            x: margin + (t.x - margin) * scaleX,
+            y: margin + (t.y - margin) * scaleY,
+          }))
+          .sort((a, b) => a.y - b.y)
+      : this.config.trees;
+
+    this.config = { ...this.config, worldWidth: ww, worldHeight: wh, trees };
     return true;
   }
 
@@ -807,7 +828,7 @@ export class ForestApp {
       if (w !== lastW || h !== lastH) {
         lastW = w;
         lastH = h;
-        if (this.matchWorldToViewport()) {
+        if (this.matchWorldToViewport(false)) {
           this.rebuildGroundOnly();
           // Keep the forest filling the screen after a window resize
           if (this.worldFitsInView() || this.camera.zoom <= this.containZoom() * 1.02) {
