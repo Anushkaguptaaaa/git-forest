@@ -1,6 +1,7 @@
 import { Assets, Container, Graphics, Sprite, Texture } from "pixi.js";
 import angelStatueUrl from "@/assets/angel-statue.png";
 import blueGnomeUrl from "@/assets/blue_gnome.png";
+import cattailUrl from "@/assets/cattail.png";
 import cherryBlossomUrl from "@/assets/cherry-blossom.png";
 import dandelionUrl from "@/assets/dandelion.png";
 import flowersUrl from "@/assets/flowers.png";
@@ -16,6 +17,8 @@ import rainbowGnomeUrl from "@/assets/rainbow_gnome.png";
 import redGnomeUrl from "@/assets/red_gnome.png";
 import stoneUrl from "@/assets/stone.png";
 import stonehengeUrl from "@/assets/stonehenge.png";
+import treeHouseUrl from "@/assets/tree-house.png";
+import wildFlowersUrl from "@/assets/wild_flowers.png";
 
 function assetSrc(mod: string | { src: string }): string {
   return typeof mod === "string" ? mod : mod.src;
@@ -24,6 +27,7 @@ function assetSrc(mod: string | { src: string }): string {
 export type DecorKind =
   | "angel-statue"
   | "blue-gnome"
+  | "cattail"
   | "cherry-blossom"
   | "dandelion"
   | "flowers"
@@ -38,7 +42,9 @@ export type DecorKind =
   | "rainbow-gnome"
   | "red-gnome"
   | "stone"
-  | "stonehenge";
+  | "stonehenge"
+  | "tree-house"
+  | "wild-flowers";
 
 export interface DecorCatalogItem {
   id: DecorKind;
@@ -65,6 +71,14 @@ export const DECOR_CATALOG: DecorCatalogItem[] = [
     minH: 18,
     maxH: 160,
     url: assetSrc(blueGnomeUrl as string | { src: string }),
+  },
+  {
+    id: "cattail",
+    label: "Cattail",
+    defaultH: 44,
+    minH: 18,
+    maxH: 180,
+    url: assetSrc(cattailUrl as string | { src: string }),
   },
   {
     id: "cherry-blossom",
@@ -185,6 +199,22 @@ export const DECOR_CATALOG: DecorCatalogItem[] = [
     minH: 28,
     maxH: 220,
     url: assetSrc(stonehengeUrl as string | { src: string }),
+  },
+  {
+    id: "tree-house",
+    label: "Tree house",
+    defaultH: 80,
+    minH: 36,
+    maxH: 260,
+    url: assetSrc(treeHouseUrl as string | { src: string }),
+  },
+  {
+    id: "wild-flowers",
+    label: "Wild flowers",
+    defaultH: 36,
+    minH: 14,
+    maxH: 160,
+    url: assetSrc(wildFlowersUrl as string | { src: string }),
   },
 ];
 
