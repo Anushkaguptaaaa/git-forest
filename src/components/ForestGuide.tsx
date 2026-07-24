@@ -25,7 +25,7 @@ const SIGNALS = [
   { name: "Pine cones", meaning: "Quiet for a year (pine & cedar)" },
   { name: "Fallen fruit", meaning: "Quiet for two years or more" },
   { name: "Tiny saplings", meaning: "Forks at the base of the tree" },
-  { name: "Weeping elder", meaning: "One of the most active repos" },
+  { name: "Weeping elder", meaning: "One of the most active repos — willow elders are darker with loopy vines" },
   { name: "Fireflies", meaning: "Appear across the meadow at night" },
 ] as const;
 

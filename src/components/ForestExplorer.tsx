@@ -8,11 +8,12 @@ import { buildWorld } from "@/lib/world/layout";
 import { SEASONS } from "@/lib/world/seasons";
 import { useForestStore } from "@/store/forestStore";
 import { ForestGuide } from "./ForestGuide";
+import { ForestGrowingLoader } from "./ForestGrowingLoader";
 import { RepoPopup } from "./RepoPopup";
 
 const ForestCanvas = dynamic(
   () => import("./ForestCanvas").then((m) => m.ForestCanvas),
-  { ssr: false, loading: () => <ForestLoading label="Planting trees..." /> }
+  { ssr: false, loading: () => <ForestGrowingLoader label="Planting trees…" /> }
 );
 
 interface ForestExplorerProps {
@@ -36,7 +37,7 @@ export function ForestExplorer({ data }: ForestExplorerProps) {
 
   return (
     <div className="explorer">
-      {world ? <ForestCanvas world={world} /> : <ForestLoading label="Growing forest..." />}
+      {world ? <ForestCanvas world={world} /> : <ForestGrowingLoader label="Growing forest…" />}
 
       <div className="crt-overlay pointer-events-none absolute inset-0 z-20" aria-hidden />
 
@@ -129,14 +130,6 @@ export function ForestExplorer({ data }: ForestExplorerProps) {
       </div>
 
       <RepoPopup />
-    </div>
-  );
-}
-
-function ForestLoading({ label }: { label: string }) {
-  return (
-    <div className="explorer-loading">
-      <p className="font-pixel explorer-loading-text">{label}</p>
     </div>
   );
 }

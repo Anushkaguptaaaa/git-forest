@@ -19,7 +19,7 @@ const SPECIES_CANOPY: Record<TreeSpecies, CanopyPalette> = {
   oak: { highlight: 0xb4e05a, mid: 0x5aaa32, shadow: 0x2f6b24 },
   pine: { highlight: 0x6db84a, mid: 0x3d7a38, shadow: 0x1f4a28 },
   birch: { highlight: 0xc8e86a, mid: 0x7cb342, shadow: 0x4a7a28 },
-  willow: { highlight: 0xa8d84a, mid: 0x689f38, shadow: 0x3d6b28 },
+  willow: { highlight: 0x6a9a38, mid: 0x3d6b28, shadow: 0x1e4020 },
   maple: { highlight: 0xf0a050, mid: 0xc45c26, shadow: 0x8a3018 },
   cherry: { highlight: 0xffc0d0, mid: 0xe891a8, shadow: 0xb85a78 },
   cedar: { highlight: 0x5a9a48, mid: 0x2d6a3e, shadow: 0x1a4030 },
@@ -312,10 +312,21 @@ function drawEvergreen(g: Graphics, h: number, canopy: CanopyPalette, trunk: Tru
 }
 
 /** Image-1 style: lush weeping elder — highest commit trees only */
-function drawLegendaryTree(g: Graphics, h: number, canopy: CanopyPalette, trunk: TrunkPalette): void {
+function drawLegendaryTree(
+  g: Graphics,
+  h: number,
+  canopy: CanopyPalette,
+  trunk: TrunkPalette,
+  species: TreeSpecies
+): void {
   const scale = Math.max(1, h / 90);
   const trunkH = 38 * scale;
   const trunkW = 10 * scale;
+  const isWillow = species === "willow";
+  // Elder willow: deeper forest greens so it reads apart from elder oak
+  const leaves = isWillow
+    ? { highlight: 0x5a8a32, mid: 0x2f5a24, shadow: 0x163818 }
+    : canopy;
 
   // shadow
   g.ellipse(0, 4, 28 * scale, 8 * scale);
@@ -352,22 +363,55 @@ function drawLegendaryTree(g: Graphics, h: number, canopy: CanopyPalette, trunk:
 
   // dense rounded canopy masses — sit low enough to cover the trunk top
   const cy = -trunkH - 10 * scale;
-  drawCanopyCluster(g, -22 * scale, cy + 10 * scale, 20 * scale, canopy);
-  drawCanopyCluster(g, 18 * scale, cy + 6 * scale, 22 * scale, canopy);
-  drawCanopyCluster(g, -4 * scale, cy - 12 * scale, 24 * scale, canopy);
-  drawCanopyCluster(g, 28 * scale, cy - 6 * scale, 16 * scale, canopy);
-  drawCanopyCluster(g, -28 * scale, cy - 4 * scale, 15 * scale, canopy);
+  drawCanopyCluster(g, -22 * scale, cy + 10 * scale, 20 * scale, leaves);
+  drawCanopyCluster(g, 18 * scale, cy + 6 * scale, 22 * scale, leaves);
+  drawCanopyCluster(g, -4 * scale, cy - 12 * scale, 24 * scale, leaves);
+  drawCanopyCluster(g, 28 * scale, cy - 6 * scale, 16 * scale, leaves);
+  drawCanopyCluster(g, -28 * scale, cy - 4 * scale, 15 * scale, leaves);
 
-  // weeping vines (signature of the reference)
-  const vineColor = canopy.highlight;
-  const vineShadow = canopy.mid;
-  for (let i = 0; i < 28; i++) {
-    const vx = (-34 + i * 2.5) * scale;
-    const top = cy + (12 + (i % 5) * 2) * scale;
-    const len = (14 + (i * 7) % 22) * scale;
-    g.moveTo(px(vx), px(top));
-    g.lineTo(px(vx + (i % 3) - 1), px(top + len));
-    g.stroke({ width: Math.max(1, scale), color: i % 2 === 0 ? vineColor : vineShadow, alpha: 0.95 });
+  const vineColor = leaves.highlight;
+  const vineShadow = leaves.mid;
+  const strokeW = Math.max(1, scale);
+
+  if (isWillow) {
+    // Semi-circle loopies dangling from the underside of the canopy
+    const loops: { x: number; y: number; r: number }[] = [
+      { x: -26, y: 22, r: 9 },
+      { x: -10, y: 26, r: 11 },
+      { x: 6, y: 24, r: 10 },
+      { x: 20, y: 28, r: 9 },
+      { x: 32, y: 23, r: 8 },
+    ];
+    for (let i = 0; i < loops.length; i++) {
+      const { x, y, r } = loops[i]!;
+      const cx = x * scale;
+      // Attachment line sits on the canopy underside; arc hangs below
+      const attachY = cy + y * scale;
+      const rad = r * scale;
+      const color = i % 2 === 0 ? vineColor : vineShadow;
+      // Counterclockwise π → 0 = lower semicircle (U hanging down)
+      g.moveTo(px(cx - rad), px(attachY));
+      g.arc(px(cx), px(attachY), rad, Math.PI, 0, true);
+      g.stroke({
+        width: Math.max(2, scale * 1.55),
+        color,
+        alpha: 0.98,
+      });
+    }
+  } else {
+    // Straight dripping vines for other elders (oak, etc.)
+    for (let i = 0; i < 28; i++) {
+      const vx = (-34 + i * 2.5) * scale;
+      const top = cy + (12 + (i % 5) * 2) * scale;
+      const len = (14 + (i * 7) % 22) * scale;
+      g.moveTo(px(vx), px(top));
+      g.lineTo(px(vx + (i % 3) - 1), px(top + len));
+      g.stroke({
+        width: strokeW,
+        color: i % 2 === 0 ? vineColor : vineShadow,
+        alpha: 0.95,
+      });
+    }
   }
 }
 
@@ -378,7 +422,7 @@ function drawForm(
   trunk: TrunkPalette
 ): void {
   if (tree.form === "legendary") {
-    drawLegendaryTree(g, tree.height, canopy, trunk);
+    drawLegendaryTree(g, tree.height, canopy, trunk, tree.species);
     return;
   }
   if (tree.form === "bare" || tree.isDead) {
