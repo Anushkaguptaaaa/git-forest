@@ -321,23 +321,23 @@ function drawLegendaryTree(g: Graphics, h: number, canopy: CanopyPalette, trunk:
   g.ellipse(0, 4, 28 * scale, 8 * scale);
   g.fill({ color: 0x000000, alpha: 0.2 });
 
-  // thick curved trunk (lean right)
+  // thick curved trunk (lean right) — reaches into the canopy so no green gap
   g.moveTo(px(-trunkW * 0.7), 2);
-  g.quadraticCurveTo(px(-trunkW * 0.2), px(-trunkH * 0.4), px(trunkW * 0.1), px(-trunkH * 0.75));
-  g.lineTo(px(trunkW * 0.85), px(-trunkH * 0.7));
+  g.quadraticCurveTo(px(-trunkW * 0.2), px(-trunkH * 0.4), px(trunkW * 0.1), px(-trunkH * 0.95));
+  g.lineTo(px(trunkW * 0.85), px(-trunkH * 0.9));
   g.quadraticCurveTo(px(trunkW * 0.4), px(-trunkH * 0.35), px(trunkW * 0.9), 2);
   g.closePath();
   g.fill(trunk.mid);
 
   g.moveTo(px(-trunkW * 0.55), 2);
-  g.quadraticCurveTo(px(-trunkW * 0.1), px(-trunkH * 0.4), px(trunkW * 0.15), px(-trunkH * 0.72));
-  g.lineTo(px(trunkW * 0.35), px(-trunkH * 0.7));
+  g.quadraticCurveTo(px(-trunkW * 0.1), px(-trunkH * 0.4), px(trunkW * 0.15), px(-trunkH * 0.92));
+  g.lineTo(px(trunkW * 0.35), px(-trunkH * 0.88));
   g.quadraticCurveTo(px(0), px(-trunkH * 0.35), px(-trunkW * 0.15), 2);
   g.closePath();
   g.fill(trunk.light);
 
   // inner branches peeking through
-  const branchY = -trunkH * 0.85;
+  const branchY = -trunkH * 0.92;
   for (const [bx, by] of [
     [-0.9, -0.2],
     [-0.4, -0.55],
@@ -350,20 +350,20 @@ function drawLegendaryTree(g: Graphics, h: number, canopy: CanopyPalette, trunk:
     g.stroke({ width: 2.5 * scale, color: trunk.dark });
   }
 
-  // dense rounded canopy masses
-  const cy = -trunkH - 18 * scale;
-  drawCanopyCluster(g, -22 * scale, cy + 6 * scale, 20 * scale, canopy);
-  drawCanopyCluster(g, 18 * scale, cy + 2 * scale, 22 * scale, canopy);
-  drawCanopyCluster(g, -4 * scale, cy - 16 * scale, 24 * scale, canopy);
-  drawCanopyCluster(g, 28 * scale, cy - 10 * scale, 16 * scale, canopy);
-  drawCanopyCluster(g, -28 * scale, cy - 8 * scale, 15 * scale, canopy);
+  // dense rounded canopy masses — sit low enough to cover the trunk top
+  const cy = -trunkH - 10 * scale;
+  drawCanopyCluster(g, -22 * scale, cy + 10 * scale, 20 * scale, canopy);
+  drawCanopyCluster(g, 18 * scale, cy + 6 * scale, 22 * scale, canopy);
+  drawCanopyCluster(g, -4 * scale, cy - 12 * scale, 24 * scale, canopy);
+  drawCanopyCluster(g, 28 * scale, cy - 6 * scale, 16 * scale, canopy);
+  drawCanopyCluster(g, -28 * scale, cy - 4 * scale, 15 * scale, canopy);
 
   // weeping vines (signature of the reference)
   const vineColor = canopy.highlight;
   const vineShadow = canopy.mid;
   for (let i = 0; i < 28; i++) {
     const vx = (-34 + i * 2.5) * scale;
-    const top = cy + (8 + (i % 5) * 2) * scale;
+    const top = cy + (12 + (i % 5) * 2) * scale;
     const len = (14 + (i * 7) % 22) * scale;
     g.moveTo(px(vx), px(top));
     g.lineTo(px(vx + (i % 3) - 1), px(top + len));
