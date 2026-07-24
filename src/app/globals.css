@@ -593,6 +593,11 @@ body {
   margin-bottom: 0.75rem;
 }
 
+.repo-popup-head > div {
+  min-width: 0;
+  flex: 1;
+}
+
 .repo-popup-meta {
   font-size: 10px;
   text-transform: uppercase;
@@ -603,8 +608,10 @@ body {
 .repo-popup-title {
   margin-top: 0.25rem;
   font-size: 1.5rem;
-  line-height: 1;
+  line-height: 1.15;
   color: #2c1810;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .repo-popup-close {
