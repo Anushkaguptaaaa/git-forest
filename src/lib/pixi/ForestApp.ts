@@ -17,7 +17,7 @@ import {
 import { loadForestSprites, scatterForestProps, type ForestLamp } from "./decorSprites";
 import { loadWoodPanel } from "./treeSign";
 import { WORLD_SKY_RATIO, buildForestFloor } from "./mapDecor";
-import { drawFireflies, drawTree } from "./trees";
+import { drawAmbientFireflies, drawTree } from "./trees";
 
 export type TreeSelectHandler = (tree: TreeTraits | null) => void;
 export type DecorSelectHandler = (
@@ -397,7 +397,7 @@ export class ForestApp {
   }
 
   private minZoom(): number {
-    // Contain: entire meadow visible — no forced pan to see the edges
+    // Full-meadow fit — never shrink the forest into a corner with empty green
     return this.containZoom();
   }
 
@@ -415,8 +415,12 @@ export class ForestApp {
 
   private fitZoom(): number {
     const contain = this.containZoom();
-    // Small forests: fill the screen.
-    // Large forests: start a bit closer so trees stay readable (pan to explore).
+    const n = this.config.trees.length;
+    // Dense forests: start at full overview (still fills the screen)
+    if (n >= 35) {
+      return contain;
+    }
+    // Small forests: fill the screen, or sit a bit closer if the meadow is tiny
     const comfortable = Math.min(1.05, this.maxZoom());
     if (contain >= comfortable * 0.92) return contain;
     return comfortable;
@@ -656,10 +660,19 @@ export class ForestApp {
     const w = this.app.screen.width;
     const h = this.app.screen.height;
     this.camera.zoom = clamp(this.camera.zoom, this.minZoom(), this.maxZoom());
-    const maxX = Math.max(0, this.config.worldWidth - w / this.camera.zoom);
-    const maxY = Math.max(0, this.config.worldHeight - h / this.camera.zoom);
-    this.camera.x = clamp(this.camera.x, 0, maxX);
-    this.camera.y = clamp(this.camera.y, 0, maxY);
+    const viewW = w / this.camera.zoom;
+    const viewH = h / this.camera.zoom;
+    // If the view is larger than the meadow, center it — don't pin to (0,0)
+    if (viewW >= this.config.worldWidth) {
+      this.camera.x = (this.config.worldWidth - viewW) / 2;
+    } else {
+      this.camera.x = clamp(this.camera.x, 0, this.config.worldWidth - viewW);
+    }
+    if (viewH >= this.config.worldHeight) {
+      this.camera.y = (this.config.worldHeight - viewH) / 2;
+    } else {
+      this.camera.y = clamp(this.camera.y, 0, this.config.worldHeight - viewH);
+    }
     this.world.scale.set(this.camera.zoom);
     this.world.position.set(-this.camera.x * this.camera.zoom, -this.camera.y * this.camera.zoom);
   }
@@ -893,12 +906,16 @@ export class ForestApp {
 
   private updateFx(): void {
     this.clearLayer(this.fxLayer);
+    // Only deep night — skip dusk so they don't show in daylight-looking scenes
     const nightness = dayNightFactor(this.dayPhase);
-    if (nightness > 0.35) {
-      for (const tree of this.config.trees) {
-        drawFireflies(tree, this.fxLayer, this.time);
-      }
-    }
+    if (nightness < 0.75) return;
+    drawAmbientFireflies(
+      this.fxLayer,
+      this.config.worldWidth,
+      this.config.worldHeight,
+      this.time,
+      this.config.seed
+    );
   }
 
   private updateWeather(): void {

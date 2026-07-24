@@ -2,11 +2,12 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { ForestData } from "@/lib/github/types";
 import { buildWorld } from "@/lib/world/layout";
 import { SEASONS } from "@/lib/world/seasons";
 import { useForestStore } from "@/store/forestStore";
+import { ForestGuide } from "./ForestGuide";
 import { RepoPopup } from "./RepoPopup";
 
 const ForestCanvas = dynamic(
@@ -26,6 +27,7 @@ export function ForestExplorer({ data }: ForestExplorerProps) {
   const setCustomizeOpen = useForestStore((s) => s.setCustomizeOpen);
   const season = world?.season;
   const weather = world?.weather;
+  const [guideOpen, setGuideOpen] = useState(false);
 
   useEffect(() => {
     const next = buildWorld(data);
@@ -50,9 +52,25 @@ export function ForestExplorer({ data }: ForestExplorerProps) {
             className={`explorer-panel font-display explorer-customize${
               customizeOpen ? " is-active" : ""
             }`}
-            onClick={() => setCustomizeOpen(!customizeOpen)}
+            onClick={() => {
+              setGuideOpen(false);
+              setCustomizeOpen(!customizeOpen);
+            }}
           >
             Customize
+          </button>
+          <button
+            type="button"
+            className={`explorer-panel font-display explorer-guide-btn${
+              guideOpen ? " is-active" : ""
+            }`}
+            aria-pressed={guideOpen}
+            onClick={() => {
+              if (!guideOpen) setCustomizeOpen(false);
+              setGuideOpen(!guideOpen);
+            }}
+          >
+            Guide
           </button>
           <div
             className="explorer-panel explorer-seasons"
@@ -99,12 +117,14 @@ export function ForestExplorer({ data }: ForestExplorerProps) {
         </div>
       </header>
 
+      <ForestGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
+
       <div className="explorer-hint font-pixel">
         <p className="explorer-hint-lore">
           Trees quiet for a year grow fruit· two years, fruit falls
         </p>
         <p className="explorer-hint-controls">
-          Scroll zoom · drag to pan · open Customize to place props &amp; move trees
+          Scroll zoom · drag to pan · Guide for the legend · Customize to place props
         </p>
       </div>
 

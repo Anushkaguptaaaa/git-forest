@@ -265,7 +265,7 @@ body {
 .explorer-header-left {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 0.5rem;
 }
 
@@ -277,6 +277,8 @@ body {
 }
 
 .explorer-customize {
+  display: inline-flex;
+  align-items: center;
   padding: 0.5rem 0.75rem;
   font-size: 1.05rem;
   color: #2c1810;
@@ -293,9 +295,29 @@ body {
   outline-offset: -6px;
 }
 
+.explorer-guide-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  font-size: 1.05rem;
+  color: #2c1810;
+  cursor: pointer;
+}
+
+.explorer-guide-btn:hover,
+.explorer-guide-btn.is-active {
+  background: #efe0bc;
+}
+
+.explorer-guide-btn.is-active {
+  outline: 2px solid #8b6914;
+  outline-offset: -6px;
+}
+
 .explorer-seasons {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   padding: 0.2rem;
   gap: 0.15rem;
 }
@@ -324,11 +346,18 @@ body {
 }
 
 .explorer-back {
-  display: block;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  box-sizing: border-box;
   padding: 0.5rem 0.75rem;
   font-size: 1.1rem;
   color: #2c1810;
   text-decoration: none;
+}
+
+.explorer-panel:has(> .explorer-back) {
+  display: flex;
 }
 
 .explorer-back:hover {
@@ -726,4 +755,128 @@ body {
   width: 100%;
   padding: 0.35rem 0.5rem;
   font-size: 0.65rem;
+}
+
+/* Field guide — legend / dictionary */
+.forest-guide {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 35;
+  top: 5.5rem;
+  right: 1rem;
+  width: min(22rem, calc(100vw - 2rem));
+  max-height: min(72dvh, 34rem);
+  overflow: auto;
+  border: 4px solid #3d2914;
+  background: #f3e6c8;
+  box-shadow: 4px 4px 0 #1a1208;
+  padding: 0.85rem 0.9rem 1rem;
+}
+
+.forest-guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.forest-guide-title {
+  font-size: 1.35rem;
+  color: #2c1810;
+  line-height: 1.1;
+}
+
+.forest-guide-close {
+  border: none;
+  background: transparent;
+  padding: 0.25rem 0.35rem;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #5c4a3a;
+  cursor: pointer;
+}
+
+.forest-guide-close:hover {
+  color: #2c1810;
+  background: #efe0bc;
+}
+
+.forest-guide-lede {
+  margin-top: 0.65rem;
+  font-size: 9px;
+  line-height: 1.55;
+  letter-spacing: 0.04em;
+  color: #5c4a3a;
+}
+
+.forest-guide-section {
+  margin-top: 0.9rem;
+}
+
+.forest-guide-heading {
+  margin-bottom: 0.45rem;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8b6914;
+}
+
+.forest-guide-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.forest-guide-list li {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  gap: 0.45rem;
+  align-items: start;
+}
+
+.forest-guide-term {
+  font-family: var(--font-pixel), monospace;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #2c1810;
+  line-height: 1.4;
+}
+
+.forest-guide-def {
+  font-family: var(--font-pixel), monospace;
+  font-size: 8px;
+  line-height: 1.45;
+  letter-spacing: 0.03em;
+  color: #5c4a3a;
+}
+
+.forest-guide-foot {
+  margin-top: 0.85rem;
+  padding-top: 0.65rem;
+  border-top: 2px solid #d4c4a0;
+  font-size: 8px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  color: #7a6548;
+}
+
+@media (max-width: 639px) {
+  .forest-guide {
+    top: auto;
+    bottom: 1rem;
+    left: 1rem;
+    right: 1rem;
+    width: auto;
+    max-height: min(55dvh, 28rem);
+  }
+
+  .forest-guide-list li {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
 }

@@ -60,10 +60,7 @@ export interface TreeTraits {
   species: TreeSpecies;
   form: TreeForm;
   height: number;
-  flowers: number;
   saplings: number;
-  nests: number;
-  fireflies: number;
   isDead: boolean;
   /** Red canopy fruits when last push is ≥1 year ago */
   fruits: number;

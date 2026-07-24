@@ -2,6 +2,7 @@ import { Assets, Container, Graphics, Sprite, Texture } from "pixi.js";
 import type { Rng } from "@/lib/world/rng";
 import lampUrl from "@/assets/lamp.png";
 import mushUrl from "@/assets/mush.png";
+import starUrl from "@/assets/star.png";
 
 function assetSrc(mod: string | { src: string }): string {
   return typeof mod === "string" ? mod : mod.src;
@@ -9,12 +10,13 @@ function assetSrc(mod: string | { src: string }): string {
 
 const LAMP_URL = assetSrc(lampUrl as string | { src: string });
 const MUSH_URL = assetSrc(mushUrl as string | { src: string });
+export const STAR_URL = assetSrc(starUrl as string | { src: string });
 
 let loaded = false;
 
 export async function loadForestSprites(): Promise<void> {
   if (loaded) return;
-  await Assets.load([LAMP_URL, MUSH_URL]);
+  await Assets.load([LAMP_URL, MUSH_URL, STAR_URL]);
   loaded = true;
 }
 

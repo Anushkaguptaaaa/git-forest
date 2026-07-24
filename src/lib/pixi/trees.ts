@@ -1,6 +1,6 @@
-import { Container, Graphics } from "pixi.js";
+import { Assets, Container, Graphics, Sprite, Texture } from "pixi.js";
 import type { Season, TreeSpecies, TreeTraits } from "@/lib/github/types";
-import { SEASON_PALETTE } from "@/lib/world/seasons";
+import { STAR_URL } from "./decorSprites";
 import { attachRepoSign } from "./treeSign";
 
 interface CanopyPalette {
@@ -87,6 +87,57 @@ function drawApple(g: Graphics, x: number, y: number): void {
   g.fill(0x3d6b24);
   g.rect(px(x + 1), px(y - 3.5), 2, 1);
   g.fill(0x5aaa32);
+}
+
+/** Tiny brown pine cone for evergreen trees */
+function drawPineCone(g: Graphics, x: number, y: number): void {
+  // stem
+  g.rect(px(x), px(y - 4), 1, 2);
+  g.fill(0x5c4030);
+  // cone body (pointy oval)
+  g.ellipse(px(x), px(y), 2.2, 3.2);
+  g.fill(0x8b5a2b);
+  g.ellipse(px(x - 0.5), px(y - 0.8), 1.2, 1.6);
+  g.fill(0xa67c52);
+  // scale notches
+  g.rect(px(x - 1), px(y - 1), 2, 1);
+  g.fill(0x6b4226);
+  g.rect(px(x - 1), px(y + 1), 2, 1);
+  g.fill(0x6b4226);
+}
+
+/** Tiny pink blossom — age signal for quiet cherry trees */
+function drawCherryBlossom(g: Graphics, x: number, y: number): void {
+  const petals: [number, number][] = [
+    [0, -2.2],
+    [2.1, -0.6],
+    [1.3, 1.8],
+    [-1.3, 1.8],
+    [-2.1, -0.6],
+  ];
+  for (const [ox, oy] of petals) {
+    g.circle(px(x + ox), px(y + oy), 1.6);
+    g.fill(0xffb7c5);
+  }
+  g.circle(px(x), px(y), 1.4);
+  g.fill(0xfff0f5);
+  g.circle(px(x), px(y), 0.9);
+  g.fill(0xffe066);
+}
+
+function drawFruit(
+  g: Graphics,
+  species: TreeSpecies,
+  x: number,
+  y: number
+): void {
+  if (species === "pine" || species === "cedar") {
+    drawPineCone(g, x, y);
+  } else if (species === "cherry") {
+    drawCherryBlossom(g, x, y);
+  } else {
+    drawApple(g, x, y);
+  }
 }
 
 function drawTrunk(
@@ -352,6 +403,36 @@ function drawForm(
   drawBroadTree(g, tree.height, canopy, trunk);
 }
 
+/** Visible star art is ~202px in a 608px-tall sheet — scale to this on-screen size. */
+const STAR_CONTENT_H = 202;
+const STAR_DISPLAY_PX = 11;
+
+function starTexture(): Texture | null {
+  const t = Assets.get<Texture>(STAR_URL);
+  return t ?? null;
+}
+
+/** One tiny star sprite perched on top of repos with more than 10 GitHub stars. */
+function attachStarSprites(
+  root: Container,
+  tree: TreeTraits,
+  _canopyR: number,
+  h: number
+): void {
+  if (tree.stars <= 10 || tree.isDead || tree.form === "bare") return;
+  const texture = starTexture();
+  if (!texture) return;
+
+  const scale = STAR_DISPLAY_PX / STAR_CONTENT_H;
+  const star = new Sprite(texture);
+  star.anchor.set(0.5, 0.55);
+  star.scale.set(scale);
+  star.x = 0;
+  star.y = px(-h - STAR_DISPLAY_PX * 0.35);
+  star.eventMode = "none";
+  root.addChild(star);
+}
+
 export function drawTree(tree: TreeTraits, season: Season): Container {
   const root = new Container();
   root.x = tree.x;
@@ -372,36 +453,43 @@ export function drawTree(tree: TreeTraits, season: Season): Container {
 
   drawForm(g, tree, canopy, trunk);
 
-  // flowers (stars) — skip on bare/winter snow look
-  if (tree.flowers > 0 && !tree.isDead && tree.form !== "bare" && season !== "winter") {
-    const flowerColor = tree.species === "cherry" ? 0xfff0f5 : SEASON_PALETTE[season].accent;
-    const count = tree.form === "legendary" ? tree.flowers + 4 : tree.flowers;
-    for (let i = 0; i < count; i++) {
-      const angle = (i / count) * Math.PI * 2;
-      const fx = Math.cos(angle) * canopyR * 0.5;
-      const fy = -h * 0.55 + Math.sin(angle) * canopyR * 0.35;
-      g.rect(px(fx - 1), px(fy - 1), 3, 3);
-      g.fill(flowerColor);
-    }
-  }
-
-  // ripe fruits — repos quiet for 1y+ (3–4 apples, spread across the canopy)
+  // ripe fruits — repos quiet for 1y+ (apples on deciduous, cones on evergreens)
   if (tree.fruits > 0 && !tree.isDead && tree.form !== "bare") {
     const count = Math.min(4, tree.fruits);
-    // Fixed offsets so fruits sit in different canopy lobes, not piled near the trunk
-    const slots: [number, number][] = [
-      [-0.55, -0.72],
-      [0.5, -0.68],
-      [0.05, -0.92],
-      [-0.25, -0.55],
-    ];
-    for (let i = 0; i < count; i++) {
-      const [ox, oy] = slots[i]!;
-      // slight per-tree wobble so neighbors don't look identical
-      const wobble = ((tree.id * (i + 3)) % 7) - 3;
-      const fx = ox * canopyR + wobble * 0.4;
-      const fy = oy * h + wobble * 0.15;
-      drawApple(g, fx, fy);
+    const evergreen = tree.species === "pine" || tree.species === "cedar";
+    if (evergreen) {
+      // Sit inside the triangular layers (same geometry as drawEvergreen)
+      const trunkH = h * 0.28;
+      const placements: { layer: number; side: number }[] = [
+        { layer: 1, side: -0.45 },
+        { layer: 2, side: 0.4 },
+        { layer: 2, side: -0.3 },
+        { layer: 3, side: 0.25 },
+      ];
+      for (let i = 0; i < count; i++) {
+        const p = placements[i]!;
+        const t = p.layer / 3;
+        const ly = -trunkH - p.layer * (h * 0.16);
+        const lw = h * 0.38 * (1.05 - t * 0.55);
+        const wobble = ((tree.id * (i + 3)) % 5) - 2;
+        const fx = p.side * lw * 0.7 + wobble * 0.25;
+        const fy = ly + h * 0.01 + wobble * 0.1;
+        drawFruit(g, tree.species, fx, fy);
+      }
+    } else {
+      const slots: [number, number][] = [
+        [-0.45, -0.62],
+        [0.4, -0.58],
+        [0.05, -0.78],
+        [-0.2, -0.48],
+      ];
+      for (let i = 0; i < count; i++) {
+        const [ox, oy] = slots[i]!;
+        const wobble = ((tree.id * (i + 3)) % 7) - 3;
+        const fx = ox * canopyR + wobble * 0.4;
+        const fy = oy * h + wobble * 0.15;
+        drawFruit(g, tree.species, fx, fy);
+      }
     }
   }
 
@@ -409,16 +497,8 @@ export function drawTree(tree: TreeTraits, season: Season): Container {
   if (tree.fallenFruit > 0 && !tree.isDead) {
     for (let i = 0; i < tree.fallenFruit; i++) {
       const fx = -8 + i * 14 + (tree.id % 5) - 2;
-      drawApple(g, fx, 2 + (i % 2));
+      drawFruit(g, tree.species, fx, 2 + (i % 2));
     }
-  }
-
-  // bird nests (issues)
-  for (let i = 0; i < tree.nests; i++) {
-    const nx = -canopyR * 0.25 + i * 7;
-    const ny = -h * 0.45;
-    g.ellipse(px(nx), px(ny), 3.5, 2);
-    g.fill(0x5d4037);
   }
 
   // fork saplings at base
@@ -431,6 +511,7 @@ export function drawTree(tree: TreeTraits, season: Season): Container {
   }
 
   root.addChild(g);
+  attachStarSprites(root, tree, canopyR, h);
   const sign = attachRepoSign(root, tree);
   (root as Container & { repoSign?: Container }).repoSign = sign;
 
@@ -444,21 +525,32 @@ export function drawTree(tree: TreeTraits, season: Season): Container {
   return root;
 }
 
-export function drawFireflies(
-  tree: TreeTraits,
+export function drawAmbientFireflies(
   container: Container,
-  time: number
+  worldWidth: number,
+  worldHeight: number,
+  time: number,
+  seed: number
 ): void {
-  if (tree.fireflies <= 0 || tree.isDead) return;
   const g = new Graphics();
   g.eventMode = "none";
-  const count = tree.form === "legendary" ? tree.fireflies + 4 : tree.fireflies;
+  // Sparse meadow glow — not tied to repo popularity
+  const count = Math.min(36, 14 + Math.floor((worldWidth * worldHeight) / 120000));
   for (let i = 0; i < count; i++) {
-    const phase = time * 0.002 + i * 1.7 + tree.id * 0.01;
-    const ox = Math.sin(phase) * 28 + Math.cos(phase * 0.7) * 10;
-    const oy = -tree.height * 0.5 + Math.cos(phase * 1.3) * 20;
-    const alpha = 0.4 + 0.6 * ((Math.sin(phase * 3) + 1) / 2);
-    g.circle(tree.x + ox, tree.y + oy, 2);
+    const base = ((seed ^ (i * 0x9e3779b9)) >>> 0) / 4294967296;
+    const base2 = ((seed ^ (i * 0x85ebca6b)) >>> 0) / 4294967296;
+    const phase = time * 0.0016 + i * 1.9;
+    const x =
+      40 +
+      base * (worldWidth - 80) +
+      Math.sin(phase) * 18 +
+      Math.cos(phase * 0.6) * 8;
+    const y =
+      40 +
+      base2 * (worldHeight - 80) +
+      Math.cos(phase * 1.1) * 14;
+    const alpha = 0.25 + 0.55 * ((Math.sin(phase * 2.8 + i) + 1) / 2);
+    g.circle(x, y, 2);
     g.fill({ color: 0xfff59d, alpha });
   }
   container.addChild(g);
